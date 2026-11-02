@@ -1,0 +1,47 @@
+{
+ "tile": {
+  "w": 238,
+  "h": 207,
+  "pad": 8,
+  "cw": 254,
+  "ch": 223,
+  "cols": 7
+ },
+ "order": [
+  "plain",
+  "woods",
+  "forest",
+  "hills",
+  "mountains",
+  "water",
+  "lake",
+  "river",
+  "swamp",
+  "vulcano",
+  "portal",
+  "village",
+  "city",
+  "tower",
+  "camp",
+  "cave",
+  "hole",
+  "deadtrees",
+  "ruins",
+  "graveyard",
+  "floating",
+  "keep",
+  "wonder",
+  "crystals",
+  "stones",
+  "farms",
+  "fog"
+ ],
+ "atlases": [
+  "greenlands",
+  "drylands",
+  "sandlands",
+  "icelands",
+  "deadlands",
+  "sketch"
+ ]
+}
