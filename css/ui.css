@@ -1,0 +1,17 @@
+/* FRONTIER — interface da etapa 0: título e linha de estado sobre o mapa */
+.topbar {
+  position: absolute; left: 0; right: 0; top: 0; z-index: 5;
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: calc(12px + var(--safe-t)) calc(16px + var(--safe-r)) 10px calc(16px + var(--safe-l));
+  pointer-events: none;
+}
+.topbar .title { font-size: 28px; color: var(--ink); }
+.topbar .stage { font-size: 15px; color: var(--ink-2); font-style: italic; }
+.status {
+  position: absolute; left: 50%; transform: translateX(-50%); z-index: 5;
+  bottom: calc(16px + var(--safe-b));
+  max-width: calc(100% - 32px); padding: .45em 1em;
+  background: var(--paper-3); border: 2px solid var(--ink); border-radius: 6px;
+  box-shadow: var(--shadow); font-size: 15px; text-align: center;
+}
+.status[data-state="error"] { border-color: var(--wax); color: var(--wax); }

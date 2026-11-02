@@ -1,0 +1,16 @@
+{
+  "name": "frontier",
+  "version": "0.0.0",
+  "description": "FRONTIER — The Unknown Lands. Jogo de estratégia com terrenos hexagonais, local, em PWA.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:affected": "node tools/affected.js",
+    "serve": "npx --yes serve -l 8080 ."
+  },
+  "repository": { "type": "git", "url": "https://github.com/bolinhaRed/frontier.git" }
+}
