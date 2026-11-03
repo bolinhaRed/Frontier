@@ -19,6 +19,7 @@ export async function loadAtlases(onProgress = () => {}) {
   try {
     paths = await (await fetch(TILES + 'paths.json')).json();
     await Promise.all(meta.atlases.map(async n => { atlases['paths-' + n] = [await loadImage(TILES + 'paths-' + n + '.webp')]; }));
+    if (paths.splits) atlases.splits = [await loadImage(TILES + 'splits.webp')];
   } catch { paths = null; }
   let done = 0;
   await Promise.all(meta.atlases.map(async n => {
@@ -44,9 +45,11 @@ export function tileSource(atlasName, tile, scale) {
   const level = scale > 0.55 ? 0 : scale > 0.28 ? 1 : scale > 0.14 ? 2 : 3;
   const img = mip(atlasName, level);
   const f = 1 / (1 << level);
-  const isPath = atlasName.startsWith('paths-');
-  const t = isPath ? paths.tile : meta.tile, i = isPath ? paths.order.indexOf(tile) : (index[tile] ?? index.plain);
-  const col = i % t.cols, row = Math.floor(i / t.cols);
+  const isPath = atlasName.startsWith('paths-'), isSplit = atlasName === 'splits';
+  const t = isPath || isSplit ? paths.tile : meta.tile;
+  const i = isSplit ? paths.splits.order.indexOf(tile) : isPath ? paths.order.indexOf(tile) : (index[tile] ?? index.plain);
+  const cols = isSplit ? paths.splits.order.length : t.cols;
+  const col = i % cols, row = Math.floor(i / cols);
   return [img, (col * t.cw + t.pad) * f, (row * t.ch + t.pad) * f, t.w * f, t.h * f];
 }
 
@@ -73,4 +76,10 @@ export function artStyle(name, displayW) {
 export function pathStyle(biome, kind, displayW) {
   const t = paths.tile, i = paths.order.indexOf(kind), s = displayW / t.w;
   return `background:url(${TILES}paths-${biome === 'foundation' ? 'sketch' : biome}.webp) ${-(i * t.cw + t.pad) * s}px ${-t.pad * s}px / ${paths.order.length * t.cw * s}px ${t.ch * s}px no-repeat;width:${displayW}px;height:${Math.round(t.h * s)}px`;
+}
+
+// Peça dividida (duas cores) num elemento HTML.
+export function splitStyle(name, displayW) {
+  const t = paths.tile, O = paths.splits.order, i = O.indexOf(name), s = displayW / t.w;
+  return `background:url(${TILES}splits.webp) ${-(i * t.cw + t.pad) * s}px ${-t.pad * s}px / ${O.length * t.cw * s}px ${t.ch * s}px no-repeat;width:${displayW}px;height:${Math.round(t.h * s)}px`;
 }

@@ -1,22 +1,22 @@
 // Interface do modo Expedição (estilo Dorfromantik). Separada do resto: o app.js só a liga ao menu.
-import { createExpedition, place, legalPlacements, placementScore, groupOf } from '../expedition/engine.js';
-import { KINDS, FAMILY_NAMES, RULES } from '../expedition/tiles.js';
-import { tileStyle, pathStyle } from './assets.js';
+import { createExpedition, place, legalPlacements, placementScore, groupOf, swapWithRow, rowCost } from '../expedition/engine.js';
+import { KINDS, RULES, isPathTile, questName, BIOME_NAMES } from '../expedition/tiles.js';
+import { tileStyle, pathStyle, splitStyle } from './assets.js';
 import { ring } from '../core/hex.js';
 import { randomSeed } from './seed.js';
 
 const SAVE = 'frontier.expedition', BEST = 'frontier.expedition.best';
 const NAMES = { plain: 'Planície', forest: 'Floresta', woods: 'Bosque', hills: 'Colinas', mountains: 'Montanhas', lake: 'Lago', village: 'Aldeia',
-  road_straight: 'Estrada', road_bend: 'Estrada em curva', road_fork: 'Cruzamento', river_straight: 'Rio', river_bend: 'Rio em curva', river_bend2: 'Rio em curva' };
+  road_straight: 'Estrada', road_bend: 'Estrada em curva', road_fork: 'Cruzamento', river_straight: 'Rio', river_bend: 'Rio em curva', river_bend2: 'Rio em curva', bridge: 'Ponte', road_split: 'Estrada de fronteira', river_split: 'Rio de fronteira' };
 
 export function createExpeditionUI({ $, esc, view, store, onMenu }) {
   let ex = null, rot = 0, ghost = null, msg = '';
   const save = () => { try { store?.setItem(SAVE, JSON.stringify(ex)); } catch {} };
   const best = () => { try { return +(store?.getItem(BEST) || 0); } catch { return 0; } };
 
-  const art = t => KINDS[t.kind].path ? { atlas: 'paths-' + t.biome, tile: t.kind } : { atlas: t.biome, tile: KINDS[t.kind].art };
+  const art = t => KINDS[t.kind].split ? { atlas: 'splits', tile: `${t.kind}:${t.biome}|${t.biome2}` } : isPathTile(t.kind) ? { atlas: 'paths-' + t.biome, tile: t.kind } : { atlas: t.biome, tile: KINDS[t.kind].art };
   const tileHTML = (t, w, r = 0) => { const a = art(t);
-    return `<span class="art" style="${KINDS[t.kind].path ? pathStyle(t.biome, t.kind, w) : tileStyle(t.biome, a.tile, w)};transform:rotate(${r * 60}deg)"></span>`; };
+    return `<span class="art" style="${KINDS[t.kind].split ? splitStyle(a.tile, w) : isPathTile(t.kind) ? pathStyle(t.biome, t.kind, w) : tileStyle(t.biome, a.tile, w)};transform:rotate(${r * 60}deg)"></span>`; };
 
   function board() {
     const cells = [], used = new Set(), legal = new Set(legalPlacements(ex).filter(p => p.rot === rot).map(p => p.q + ',' + p.r));
@@ -38,12 +38,13 @@ export function createExpeditionUI({ $, esc, view, store, onMenu }) {
     $('#cover').hidden = true;
     $('.panel').classList.remove('over', 'in-event'); $('.panel').classList.add('expedition');
     const quests = ex.quests.map(q => { const size = groupOf(ex, q.at, q.kind).length;
-      return `<li><b>${esc(FAMILY_NAMES[q.kind])}</b>: ${size}/${q.target} <small>(círculo dourado no mapa)</small></li>`; }).join('');
+      return `<li><b>${esc(questName(q.kind))}</b>: ${size}/${q.target} <small>(círculo dourado no mapa)</small></li>`; }).join('');
     $('#side').innerHTML = `<h2>Expedição</h2><p><b>${ex.score}</b> pontos · <b>${ex.stack + (ex.next ? 1 : 0) + (ex.current ? 1 : 0)}</b> peças por colocar</p>
       <p class="hint">Recorde: ${best()} pontos</p>
       <h2>Missões (+${RULES.questReward.points} pontos e +${RULES.questReward.tiles} peças)</h2>${quests ? `<ul class="objs">${quests}</ul>` : '<p class="hint">Algumas peças trazem uma missão: faz crescer o grupo dessa peça até ao número indicado.</p>'}
-      <h2>Como se joga</h2><ul class="objs"><li>Roda a peça e põe-na ao lado de outra.</li><li>Cada lado que bate com o vizinho dá 1 ponto.</li>
-      <li>Estradas só tocam estradas ou Aldeias; rios só tocam rios ou Lagos.</li><li>Peça rodeada pelos 6 lados, todos a bater: encaixe perfeito, +3 pontos e +1 peça.</li>
+      <h2>Como se joga</h2><ul class="objs"><li>Roda a peça e põe-na ao lado de outra.</li><li>Cada lado com o mesmo terreno do vizinho dá 1 ponto; com a mesma cor também, mais 1. Estradas e rios não têm cor.</li>
+      <li>Fila: podes trocar a peça actual por uma das 3 à vista; custa peças da pilha (1, depois 2, depois 3…).</li>
+      <li>Estradas só tocam estradas; rios só tocam rios ou Lagos. Uma ponta aberta só aceita a peça que a continua.</li><li>Peça rodeada pelos 6 lados, com terreno e cor a bater: encaixe perfeito, +3 pontos e +1 peça.</li>
       <li>Acaba quando acabarem as peças.</li></ul>`;
     if (ex.over) {
       const b = best(), rec = ex.score >= b && ex.score > 0;
@@ -56,10 +57,12 @@ export function createExpeditionUI({ $, esc, view, store, onMenu }) {
     }
     $('#head').innerHTML = `Expedição · ${ex.score} pontos · ${ex.stack + 2} peças`;
     $('#guide').innerHTML = ghost
-      ? (ghost.sc ? `<b>+${ghost.sc.points} pontos</b>${ghost.sc.perfect ? ' · encaixe perfeito (+1 peça)' : ''}. Toca outra vez no mesmo hexágono, ou em «Colocar». Podes rodar antes.` : 'Com esta rotação não encaixa aqui. Roda a peça ou escolhe outro hexágono.')
+      ? (ghost.sc ? `<b>+${ghost.sc.points} pontos</b> (${ghost.sc.match} de terreno, ${ghost.sc.colour} de cor)${ghost.sc.perfect ? ' · encaixe perfeito (+1 peça)' : ''}. Toca outra vez no mesmo hexágono, ou em «Colocar». Podes rodar antes.` : 'Com esta rotação não encaixa aqui. Roda a peça ou escolhe outro hexágono.')
       : 'Roda a peça (↻) e toca num hexágono marcado. Marcados = onde encaixa com esta rotação.';
-    $('#hand').innerHTML = `<div class="ex-tile"><button class="card on" disabled>${tileHTML(ex.current, 76, rot)}<span class="nm">${esc(NAMES[ex.current.kind])}</span>${ex.current.quest ? `<span class="bi">missão: +${ex.current.quest.add} no grupo</span>` : ''}</button></div>`;
-    $('#market').innerHTML = ex.next ? `<div class="card" style="opacity:.75">${tileHTML(ex.next, 56)}<span class="bi">a seguir: ${esc(NAMES[ex.next.kind])}</span></div>` : '<span class="hint">Última peça</span>';
+    $('#hand').innerHTML = `<div class="ex-tile"><button class="card on" disabled>${tileHTML(ex.current, 76, rot)}<span class="nm">${esc(NAMES[ex.current.kind])}</span>${ex.current.quest ? `<span class="bi">missão: ${esc(questName(ex.current.quest.kind))} +${ex.current.quest.add}</span>` : ''}</button></div>`
+      + (ex.next ? `<div class="card" style="opacity:.75">${tileHTML(ex.next, 56)}<span class="bi">a seguir</span></div>` : '');
+    const cost = rowCost(ex);
+    $('#market').innerHTML = ex.row.map((t, i) => t ? `<button class="card" data-ex-swap="${i}" ${ex.stack >= cost ? '' : 'disabled'} title="Trocar pela peça actual">${tileHTML(t, 60)}<span class="nm">${esc(NAMES[t.kind])}</span><span class="bi">trocar: −${cost} peças</span></button>` : '').join('');
     $('#tools').innerHTML = '<button class="btn primary" data-ex-rot>↻ Rodar</button>' + (ghost?.sc ? '<button class="btn primary" data-ex-place>Colocar</button>' : '') + (ghost ? '<button class="btn" data-ex-cancel>Cancelar</button>' : '');
     $('#msg').textContent = msg;
   }
@@ -83,16 +86,17 @@ export function createExpeditionUI({ $, esc, view, store, onMenu }) {
   function onClick(b) {
     if (b.dataset.exRot != null) { rot = (rot + 1) % 6; if (ghost) ghost.sc = placementScore(ex, ghost.q, ghost.r, { ...ex.current, rot }); render(); return true; }
     if (b.dataset.exPlace != null) { commit(); return true; }
+    if (b.dataset.exSwap != null) { const r = swapWithRow(ex, +b.dataset.exSwap); if (r.error) msg = r.error; else { ex = r.state; ghost = null; rot = 0; msg = 'Trocaste de peça.'; save(); } render(); return true; }
     if (b.dataset.exCancel != null) { ghost = null; render(); return true; }
     if (b.dataset.exNew != null) { start(true); return true; }
     return false;
   }
   function start(fresh = false) {
     let saved = null; try { saved = !fresh && JSON.parse(store?.getItem(SAVE) || 'null'); } catch {}
-    ex = saved && saved.mode === 'expedition' && !saved.over ? saved : createExpedition(randomSeed());
+    ex = saved && saved.mode === 'expedition' && saved.version === 2 && !saved.over ? saved : createExpedition(randomSeed());
     rot = 0; ghost = null; msg = ''; save(); render();
     view.fitAll($('.topbar').getBoundingClientRect().bottom, innerHeight - $('.panel').getBoundingClientRect().top);
   }
-  const hasSaved = () => { try { const s = JSON.parse(store?.getItem(SAVE) || 'null'); return !!(s && !s.over); } catch { return false; } };
+  const hasSaved = () => { try { const s = JSON.parse(store?.getItem(SAVE) || 'null'); return !!(s && s.version === 2 && !s.over); } catch { return false; } };
   return { start, render, onHex, onClick, hasSaved };
 }

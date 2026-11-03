@@ -3,7 +3,7 @@
   "w": 238,
   "h": 207,
   "pad": 2,
-  "cols": 6,
+  "cols": 7,
   "cw": 242,
   "ch": 211
  },
@@ -13,7 +13,8 @@
   "road_bend",
   "river_straight",
   "river_bend2",
-  "river_bend"
+  "river_bend",
+  "bridge"
  ],
  "openings": {
   "road_straight": [
@@ -40,6 +41,37 @@
   "river_bend2": [
    2,
    0
+  ],
+  "bridge": {
+   "road": [
+    3,
+    0
+   ],
+   "river": [
+    1,
+    4
+   ]
+  }
+ },
+ "splits": {
+  "order": [
+   "river_split:deadlands|sandlands",
+   "river_split:drylands|sandlands",
+   "river_split:greenlands|sandlands",
+   "river_split:icelands|sandlands",
+   "river_split:drylands|greenlands",
+   "river_split:deadlands|icelands",
+   "river_split:icelands|greenlands",
+   "river_split:greenlands|icelands",
+   "river_split:drylands|icelands",
+   "road_split:deadlands|sandlands",
+   "road_split:deadlands|icelands",
+   "road_split:greenlands|icelands",
+   "road_split:drylands|icelands",
+   "road_split:greenlands|sandlands",
+   "road_split:greenlands|drylands",
+   "road_split:greenlands|deadlands",
+   "road_split:drylands|sandlands"
   ]
  }
 }
