@@ -73,7 +73,8 @@ function openMenu(note = '') {
       <span><button class="btn small primary" data-load="${g.id}">${g.over ? 'Ver' : 'Continuar'}</button><button class="btn small" data-export="${g.id}">Exportar</button><button class="btn small" data-del="${g.id}">Apagar</button></span></li>`).join('')}</ul>`
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
-    <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p></div>`;
+    <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
+    <p class="hint">Versão 6.1</p></div>`;
 }
 
 function act(a) {
