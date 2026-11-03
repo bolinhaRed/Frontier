@@ -38,7 +38,7 @@ const needsCover = () => mode === 'game' && state && state.players.length > 1 &&
 function newGame(names) {
   state = createGame({ seed: randomSeed(), players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i] })) });
   chosen = picked = discard = null; revealed = null; lastMsg = ''; currentId = newSaveId(); hideDice(); mode = 'game';
-  $('#dialog').hidden = true; persist(); render(); fit();
+  $('#dialog').hidden = true; persist(); render(); fit(); intro();
 }
 function resume(saved) {
   state = saved.state; currentId = saved.id; hideDice(); mode = 'game'; chosen = picked = discard = null; revealed = state.players.length === 1 ? 0 : null; lastMsg = '';
@@ -66,7 +66,7 @@ function openMenu(note = '') {
   const when = iso => new Date(iso).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
   d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2>
     <div class="row-btns"><button class="btn primary" data-world>Campanha Solo</button><button class="btn" data-open-new>Partida de 2 a 4 jogadores</button></div>
-    <div class="row-btns"><button class="btn small" data-help>Como jogar</button>${state && mode === 'game' ? '<button class="btn small" data-cancel>Voltar ao jogo</button>' : ''}</div>
+    <div class="row-btns"><button class="btn small" data-help>Como jogar</button>${tips ? '' : '<button class="btn small" data-tips-on>Mostrar dicas</button>'}${state && mode === 'game' ? '<button class="btn small" data-cancel>Voltar ao jogo</button>' : ''}</div>
     ${note ? `<p class="warn">${esc(note)}</p>` : ''}
     <h3>Partidas guardadas</h3>
     ${saves.length ? `<ul class="saves">${saves.map(g => `<li${g.id === currentId ? ' class="cur"' : ''}><div><b>${g.players.map(esc).join(', ')}</b><small>${esc(g.where)} · ${esc(when(g.savedAt))}</small></div>
@@ -119,9 +119,10 @@ function boardView() {
   const step = state.phase === 'setup' ? 'setup' : state.step;
   if (step === 'setup' || step === 'place') emptyFrontier(state).forEach(k => legal.add(k));
   if (step === 'actions' && chosen) legalActions(state).filter(a => a.type === 'expand' && a.card === chosen).forEach(a => legal.add(a.q + ',' + a.r));
+  const doable = new Set(step === 'actions' && !chosen && !needsCover() ? legalActions(state).filter(a => a.type === 'build' || a.type === 'explore').map(a => a.q + ',' + a.r) : []);
   for (const [k, c] of Object.entries(state.board)) {
     const [q, r] = parseKey(k); used.add(k);
-    const mark = picked === k ? '#c8922e' : null;
+    const mark = picked === k ? '#c8922e' : doable.has(k) ? '#3f7a3a' : null;
     if (c.kind === 'site') cells.push({ q, r, atlas: 'greenlands', tile: SITES[c.site].tile, flag: c.explored != null ? state.players[c.explored].color : null, mark });
     else if (c.kind === 'lake') cells.push({ q, r, atlas: c.biome, tile: 'lake', mark });
     else if (c.kind === 'deadtrees' || c.kind === 'volcano') cells.push({ q, r, atlas: c.biome, tile: c.kind === 'volcano' ? 'vulcano' : 'deadtrees', color: c.owner != null ? state.players[c.owner].color : null, token: c.token, mark });
@@ -211,6 +212,22 @@ function eventDetail(ev, pid) {
   return '';
 }
 
+// Primeira partida neste aparelho: resumo de um turno em 4 passos.
+function intro() {
+  let seen = false; try { seen = localStorage.getItem('frontier.intro') === '1'; } catch {}
+  tips = tips || !seen;
+  if (seen) return;
+  const d = $('#dialog'); d.hidden = false;
+  d.innerHTML = `<div class="cover-box help"><h2>Como se joga</h2>
+    <p>Constróis um território com hexágonos de terreno. Cada terreno tem um número; quando esse número sai nos dados, o terreno dá-te um recurso: <b>Madeira</b>, <b>Pedra</b> ou <b>Provisões</b>. Com os recursos constróis e exploras, e isso dá pontos.</p>
+    <ol><li><b>Dados</b>: lança; os terrenos com esse número produzem.</li>
+    <li><b>Colocar</b>: põe 1 terreno da mão ao lado de outro.</li>
+    <li><b>Acções</b>: constrói, explora, troca — o jogo marca no mapa o que podes fazer.</li>
+    <li><b>Repor</b>: volta a ter 3 cartas na mão.</li></ol>
+    <p>Em cada passo aparece uma dica por baixo do título do painel. Tens as regras completas em «Como jogar».</p>
+    <div class="row-btns"><button class="btn primary" data-intro>Percebi, vamos jogar</button></div></div>`;
+}
+
 // ---------- Campanha Solo ----------
 function openWorld() {
   camp = store ? loadCampaign(store) : loadCampaign({ getItem: () => null });
@@ -234,7 +251,7 @@ function startSolo(id) {
   const scenario = buildScenario(t, camp.relics.equipped, borderFor(camp, t));
   state = createGame({ seed: randomSeed(), players: [{ name: 'Tu', color: COLORS[0] }], scenario });
   chosen = picked = discard = null; revealed = 0; lastMsg = ''; currentId = newSaveId(); mode = 'game';
-  persist(); render(); fit();
+  persist(); render(); fit(); intro();
 }
 function soloSideHTML() {
   const s = state, so = s.solo, p = s.players[0];
@@ -266,6 +283,35 @@ function coverHTML() {
     <p>Passa o aparelho a ${esc(p.name)}. A mão e o objectivo privado só aparecem depois de tocar no botão.</p>
     ${lastMsg ? `<p class="last">Última jogada: ${esc(lastMsg)}</p>` : ''}
     <button class="btn primary" data-reveal>Sou ${esc(p.name)} — mostrar</button></div>`;
+}
+
+// Dica do passo actual: o que fazer agora e porquê, em linguagem simples.
+let tips = true;
+try { tips = localStorage.getItem('frontier.tips') !== '0'; } catch {}
+function guideHTML() {
+  const s = state; if (!s || !tips || needsCover()) return '';
+  const off = ' <button class="link" data-tips>Esconder dicas</button>';
+  if (s.event) return '<b>Acontecimento.</b> Lê o cartão e escolhe uma opção. Os efeitos «não produzem» duram 2 rondas.' + off;
+  if (s.phase === 'over') return '';
+  if (s.phase === 'setup') return '<b>Preparação.</b> Toca num hexágono marcado para pôr este terreno. Cada terreno produz quando sair o número dele nos dados. Terrenos da mesma família lado a lado formam regiões, que dão pontos.' + off;
+  const L = legalActions(s);
+  const T = {
+    roll: '<b>Passo 1 de 4 — dados.</b> Carrega em «Lançar os dados». Todos os terrenos com o número que sair produzem para o dono: Planície, Lago e Rio dão Provisões; Floresta e Bosque, Madeira; Colinas e Montanhas, Pedra.',
+    caravan: '<b>Saiu 7.</b> Ninguém produz. Escolhe 1 recurso, ou trocas mais baratas neste turno (2 por 1 em vez de 3 por 1).',
+    place: '<b>Passo 2 de 4 — colocar.</b> Escolhe uma carta da mão e toca num hexágono marcado. O número na carta é o que a faz produzir: 6 e 8 saem muito, 2 e 12 quase nunca. Juntar terrenos da mesma família faz crescer regiões (3, 5, 7… terrenos dão pontos).',
+    stones: '<b>Círculo de pedras.</b> Escolhe a ordem dos próximos acontecimentos. Só tu vês estas cartas.',
+    refill: '<b>Passo 4 de 4 — repor a mão.</b> Tira do baralho (grátis, carta surpresa) ou toca numa carta do mercado (vês o terreno e o número; custa 1 Provisão).',
+    limit: '<b>Demasiados recursos.</b> No fim do teu turno só podes guardar 10. Escolhe quais devolves.',
+  };
+  if (s.step !== 'actions') return (T[s.step] || '') + off;
+  const builds = [...new Set(L.filter(a => a.type === 'build').map(a => STRUCTURES[a.structure].name))];
+  const can = [];
+  if (builds.length) can.push('construir ' + builds.join(', '));
+  if (L.some(a => a.type === 'explore')) can.push('explorar um local especial (2 Provisões)');
+  if (L.some(a => a.type === 'expand')) can.push('fazer uma Expansão (2 Madeira + 2 Provisões)');
+  if (L.some(a => a.type === 'trade')) can.push('trocar recursos');
+  if (L.some(a => a.type === 'concludeSolo')) can.push('concluir o território');
+  return '<b>Passo 3 de 4 — acções.</b> ' + (can.length ? `Agora consegues: ${can.join('; ')}. Os hexágonos onde podes construir ou explorar estão marcados: toca num deles.` : 'Ainda não tens recursos para construir ou explorar. Não faz mal: carrega em «Terminar acções».') + off;
 }
 
 function stepsHTML() {
@@ -334,6 +380,7 @@ function render() {
   }
   if (s.lastEvent && !s.event && lastShown !== s.lastEvent.id + s.lastEvent.round) { lastShown = s.lastEvent.id + s.lastEvent.round; lastMsg = `Acontecimento: ${EVENTS[s.lastEvent.id].name}.`; $('#msg').textContent = lastMsg; }
   $('#head').innerHTML = head;
+  $('#guide').innerHTML = guideHTML();
   $('#tools').innerHTML = s.phase === 'over' ? finalHTML() : tools;
   $('#market').innerHTML = s.market.map(id => cardHTML(id, s.phase === 'turn' && s.step === 'refill' && p.resources.food >= 1 ? 'data-buy="1"' : 'disabled')).join('');
   $('.panel').classList.toggle('over', s.phase === 'over');
@@ -364,6 +411,9 @@ function bind() {
     sound.unlock();
     const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
     if (b.dataset.menu != null) return openMenu();
+    if (b.dataset.tipsOn != null) { tips = true; try { localStorage.setItem('frontier.tips', '1'); } catch {} openMenu(); return; }
+    if (b.dataset.tips != null) { tips = false; try { localStorage.setItem('frontier.tips', '0'); } catch {} render(); return; }
+    if (b.dataset.intro != null) { try { localStorage.setItem('frontier.intro', '1'); } catch {} $('#dialog').hidden = true; return; }
     if (b.dataset.world != null) return openWorld();
     if (b.dataset.go) return startSolo(+b.dataset.go);
     if (b.dataset.equip) { toggleRelic(camp, b.dataset.equip); saveCampaign(store, camp); renderWorld(); return; }

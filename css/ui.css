@@ -147,3 +147,7 @@ label.btn { cursor: pointer; }
 @media (max-width: 600px) { .event .art { transform: scale(.7); transform-origin: top left; margin: 0 -30px -40px 0; } }
 .panel.in-event .row { display: none; }
 .ok { color: var(--moss); font-weight: 700; } .stars { color: #b07d1e; letter-spacing: 2px; }
+.guide { margin: -2px 0 8px; padding: 6px 10px; font-size: 14px; line-height: 1.4; background: rgba(79,107,51,.10); border-left: 4px solid var(--moss); border-radius: 4px; }
+.guide:empty { display: none; }
+.link { background: none; border: 0; padding: 0; font: inherit; font-size: 13px; color: var(--ink-3); text-decoration: underline; cursor: pointer; }
+@media (max-width: 760px) { .dice-layer { inset: 0 0 auto 0; height: 50%; } }
