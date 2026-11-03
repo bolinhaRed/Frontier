@@ -8,6 +8,7 @@ local: sem servidor, sem contas e sem rede durante a partida.
 
 - **Campanha Solo**: 13 territórios num mundo contínuo; em cada turno lanças 3 dados e escolhes 2; uma praga avança da borda e tens de a travar com Torres e Fortalezas; objectivo em lista de progresso; estrelas, relíquias, fronteira herdada.
 - **Expedição** (estilo Dorfromantik): sozinho e sem dados; encaixar peças, ligar estradas e rios, cumprir missões. Modo à parte, em `src/expedition/` e `src/ui/expedition.js`, que se pode retirar sem afectar os outros.
+- **Nevoeiro** (roguelite, 3 territórios): sozinho e sem dados; abrir caminho no nevoeiro, descobrir locais e perigos, gerir mantimentos, ganhar relíquias. Modo à parte, em `src/fog/` e `src/ui/fog.js`; valores provisórios em `FOG` (`src/fog/engine.js`).
 - **Free Frontier** e **Frontier Rules**: 2 a 4 jogadores no mesmo aparelho, pessoas ou IA (fácil, normal, difícil).
 - 10 acontecimentos, dados animados, «Como jogar», dicas em cada passo.
 - Gravação automática de várias partidas, exportar e importar.
