@@ -67,6 +67,6 @@ Precisa de Node 20 ou mais recente. Não há dependências para instalar.
 
 ## Licenças
 
-Código: MIT (`LICENSE`). Ilustrações: C. Martins, licença por confirmar pacote a pacote (`CREDITS.md`).
+Código: MIT (`LICENSE`). Ilustrações: C. Martins, licença por confirmar pacote a pacote (`CREDITS.md`)
 
 Repositório: <https://github.com/bolinhaRed/frontier>
