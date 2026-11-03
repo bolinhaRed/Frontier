@@ -1,8 +1,10 @@
 // FRONTIER — vista do mapa: desenho em Canvas 2D, câmara, toque, pinça, roda e rato.
 // Reutilizado do projecto original (map-engine.js), sem nevoeiro nem exploradores.
 // Recebe um quadro já pronto a desenhar; não conhece as regras do jogo.
-//   board = { cells: [{ q, r, atlas, tile, rot }], slots: [{ q, r }] }
-//   cells: hexágonos com tile; slots: hexágonos vazios desenhados como contorno.
+//   board = { cells: [{ q, r, atlas, tile, rot, color?, token? }], slots: [{ q, r, legal? }] }
+//   cells: hexágonos com tile (color = contorno do dono, token = número da ficha, flag = cor de quem
+//   explorou o local, mark = contorno tracejado de destaque);
+//   slots: hexágonos vazios desenhados como contorno; legal = onde se pode jogar agora.
 import { hexToPixel, pixelToHex, key, HEX_SIZE, TILE_W, TILE_H, corners } from '../core/hex.js';
 import { tileSource } from './assets.js';
 
@@ -78,10 +80,12 @@ export class MapView {
     if (!this.motion) { Object.assign(this.cam, to); this._clamp(); this.dirty = true; return; }
     this.tween = { from: { ...this.cam }, to, t0: now(), dur };
   }
-  fitAll() {
+  // Enquadra o mapa na área livre entre insetTop e insetBottom (px no ecrã), p. ex. acima de um painel.
+  fitAll(insetTop = 0, insetBottom = 0) {
     const b = this.bounds; if (!b) return;
-    const z = Math.min(this.W / (b.x1 - b.x0), this.H / (b.y1 - b.y0)) * 0.9;
-    this.flyTo((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, z);
+    const H = Math.max(120, this.H - insetTop - insetBottom);
+    const z = Math.min(this.W / (b.x1 - b.x0), H / (b.y1 - b.y0)) * 0.9;
+    this.flyTo((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2 + (insetBottom - insetTop) / 2 / z, z);
   }
   select(h) { this.selected = h; this.dirty = true; }
 
@@ -180,10 +184,39 @@ export class MapView {
     const grid = new Path2D();
     this.slotPos.forEach(p => this._hexPath(grid, p.x, p.y));
     ctx.lineWidth = 2.2; ctx.strokeStyle = 'rgba(92,70,40,.22)'; ctx.stroke(grid);
+    // hexágonos onde se pode jogar agora
+    const legal = new Path2D(); let anyLegal = false;
+    (this.board.slots || []).forEach((h, i) => { if (h.legal) { anyLegal = true; this._hexPath(legal, this.slotPos[i].x, this.slotPos[i].y, HEX_SIZE - 8); } });
+    if (anyLegal) { ctx.fillStyle = 'rgba(200,146,46,.14)'; ctx.fill(legal); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(156,106,32,.55)'; ctx.stroke(legal); }
     for (const { h, p } of this.order) this._tile(h.atlas, h.tile, p, h.rot || 0);
+    for (const { h, p } of this.order) {
+      if (h.color) { ctx.lineWidth = 7; ctx.strokeStyle = h.color; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 6)); }
+      if (h.token != null) this._token(p.x, p.y + 52, h.token);
+      if (h.flag) this._flag(p.x + 34, p.y - 62, h.flag);
+      if (h.mark) { ctx.lineWidth = 6; ctx.setLineDash([14, 10]); ctx.strokeStyle = h.mark; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 14)); ctx.setLineDash([]); }
+    }
     const outline = (h, color, w) => { if (!h) return; const p = hexToPixel(h.q, h.r); ctx.lineWidth = Math.max(w, w / 2 / cam.z); ctx.strokeStyle = color; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 5)); };
     if (this.hover !== this.selected) outline(this.hover, 'rgba(255,244,214,.75)', 4);
     outline(this.selected, '#c8922e', 6);
+  }
+
+  // Ficha de número: círculo de pergaminho; 6 e 8 a vermelho, como no papel.
+  _token(x, y, n) {
+    const ctx = this.ctx, hot = n === 6 || n === 8;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(x, y, 24, 0, Math.PI * 2); ctx.fillStyle = '#f6edd8'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#2f2216'; ctx.stroke();
+    ctx.fillStyle = hot ? '#a8321f' : '#2f2216'; ctx.font = `700 ${hot ? 28 : 25}px Alegreya, Georgia, serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), x, y + 1);
+    ctx.restore();
+  }
+
+  // Galhardete na cor do jogador que explorou o local.
+  _flag(x, y, color) {
+    const ctx = this.ctx; ctx.save();
+    ctx.strokeStyle = '#2f2216'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x, y + 52); ctx.lineTo(x, y - 6); ctx.stroke();
+    ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(x, y - 6); ctx.lineTo(x + 38, y + 7); ctx.lineTo(x, y + 20); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
   }
 
   _tile(atlas, tile, p, rot) {

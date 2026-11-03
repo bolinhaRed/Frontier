@@ -17,9 +17,22 @@
     <canvas id="map" class="map" aria-label="Mapa"></canvas>
     <header class="topbar">
       <h1 class="title">FRONTIER</h1>
-      <span class="stage">Etapa 0 · base técnica, sem regras de jogo</span>
+      <nav id="steps" class="steps" aria-label="Passos do turno"></nav>
+      <span class="spacer"></span>
+      <button class="btn small side-toggle" data-side>Jogadores</button>
+      <button id="music" class="btn small" aria-pressed="false">Música: desligada</button>
+      <button class="btn small" data-open-new>Nova partida</button>
     </header>
-    <p id="status" class="status" role="status" aria-live="polite">A carregar…</p>
+    <aside id="side" class="side"></aside>
+    <section class="panel" aria-live="polite">
+      <p id="head" class="head"></p>
+      <div class="row"><div><h2>Mão</h2><div id="hand" class="cards"></div></div>
+        <div><h2>Mercado</h2><div id="market" class="cards"></div></div></div>
+      <div id="tools" class="tools"></div>
+      <p id="msg" class="msg" role="status"></p>
+    </section>
+    <div id="cover" class="cover" hidden></div>
+    <div id="dialog" class="cover" hidden></div>
   </main>
   <script type="module" src="src/ui/app.js"></script>
 </body>

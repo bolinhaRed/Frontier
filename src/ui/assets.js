@@ -42,3 +42,11 @@ export function tileSource(atlasName, tile, scale) {
   const col = i % t.cols, row = Math.floor(i / t.cols);
   return [img, (col * t.cw + t.pad) * f, (row * t.ch + t.pad) * f, t.w * f, t.h * f];
 }
+
+// Estilo CSS para mostrar um tile num elemento HTML (cartas da mão e do mercado).
+export function tileStyle(atlasName, tile, displayW) {
+  const t = meta.tile, i = index[tile] ?? index.plain;
+  const col = i % t.cols, row = Math.floor(i / t.cols), s = displayW / t.w;
+  const sheetW = t.cols * t.cw, sheetH = Math.ceil(meta.order.length / t.cols) * t.ch;
+  return `background:url(${TILES + atlasName}.webp) ${-(col * t.cw + t.pad) * s}px ${-(row * t.ch + t.pad) * s}px / ${sheetW * s}px ${sheetH * s}px no-repeat;width:${displayW}px;height:${Math.round(t.h * s)}px`;
+}

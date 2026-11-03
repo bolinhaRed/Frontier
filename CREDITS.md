@@ -24,6 +24,10 @@ Desenhos de **Carlos Martins (C. Martins)**, segundo os créditos do projecto or
 
 IM Fell English SC (Igino Marini) e Alegreya (Huerta Tipográfica), SIL Open Font License 1.1.
 
+## Música e efeitos
+
+Sintetizados em tempo real pelo próprio jogo (`src/ui/audio.js`), sem ficheiros de áudio.
+
 ## Código
 
 © 2026 bolinhaRed, licença MIT (ver `LICENSE`).
