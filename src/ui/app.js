@@ -21,8 +21,8 @@ import { chooseAction } from '../ai/ai.js';
 import { objectiveItems, blightText } from './objective.js';
 import { createExpeditionUI } from './expedition.js';
 import { createUnknownUI } from './unknown.js';
-import { createFogUI } from './fog.js';
-let expUI = null, unkUI = null, fogUI = null;
+import { createNationsUI } from './nations.js';
+let expUI = null, unkUI = null, natUI = null;
 import { worldBoard, worldSideHTML, territoryHTML, territoryAt } from './world.js';
 import { loadCampaign, saveCampaign, recordResult, takeRelic, toggleRelic, borderFor, territory } from '../storage/campaign.js';
 import { buildScenario } from '../core/scenario.js';
@@ -82,9 +82,9 @@ function openMenu(note = '') {
   d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2>
     <div class="modes">
       <button class="btn primary" data-world><b>Campanha Solo</b><small>Sozinho, território a território, contra a praga</small></button>
+      <button class="btn primary" data-nations><b>Quatro Nações</b><small>Guardiões, Forjadores, Nómadas e Espíritos · peões, conquista e combate · sozinho contra a IA (3 níveis) ou com amigos ${natUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
       <button class="btn" data-open-new="A"><b>Free Frontier</b><small>2 a 4 · contra a IA ou com amigos · regras base</small></button>
       <button class="btn" data-open-new="B"><b>Frontier Rules</b><small>2 a 4 · contra a IA ou com amigos · biomas, rios e presságios</small></button>
-      <button class="btn primary" data-fog><b>Nevoeiro</b><small>Sozinho, 3 territórios: abre caminho no nevoeiro, descobre locais e perigos, gere os mantimentos, ganha relíquias. Sem dados. ${fogUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
       <button class="btn primary" data-unknown><b>Terras Desconhecidas</b><small>Sozinho: cartografa uma região com um Explorador, liga Aldeias e locais, 3 capítulos com objectivos. Sem dados. ${unkUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
       <button class="btn" data-expedition><b>Expedição</b><small>Sozinho, ao estilo Dorfromantik: encaixa peças, liga estradas e rios, cumpre missões. Sem dados. ${expUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
     </div>
@@ -96,7 +96,7 @@ function openMenu(note = '') {
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
     <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
-    <p class="hint">Versão 1.4</p></div>`;
+    <p class="hint">Versão 1.5</p></div>`;
 }
 
 function act(a) {
@@ -403,11 +403,11 @@ function stepsHTML() {
 }
 
 function render() {
-  $('.panel').classList.remove('unknown', 'fog');
+  $('.panel').classList.remove('unknown');
   if (mode === 'world') return renderWorld();
   if (mode === 'expedition') return expUI.render();
   if (mode === 'unknown') return unkUI.render();
-  if (mode === 'fog') return fogUI.render();
+  if (mode === 'nations') return natUI.render();
   $('.panel').classList.remove('expedition');
   if (humans().length === 1 && who() != null && !isAI(who())) revealed = who();   // uma só pessoa: nunca é preciso passar o aparelho
   const covered = needsCover();
@@ -489,7 +489,7 @@ function onHex(h) {
   if (!h) return;
   if (mode === 'expedition') return expUI.onHex(h);
   if (mode === 'unknown') return unkUI.onHex(h);
-  if (mode === 'fog') return fogUI.onHex(h);
+  if (mode === 'nations') return natUI.onHex(h);
   if (mode === 'world') { const t = territoryAt(h.q, h.r); selT = t ? t.id : null; renderWorld(); return; }
   const s = state, k = h.q + ',' + h.r;
   if (isAI(who())) return;
@@ -519,8 +519,8 @@ function bind() {
     const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
     if (mode === 'expedition' && expUI.onClick(b)) return;
     if (mode === 'unknown' && unkUI.onClick(b)) return;
-    if (mode === 'fog' && fogUI.onClick(b)) return;
-    if (b.dataset.fog != null) { mode = 'fog'; $('#dialog').hidden = true; hideDice(); fogUI.start(); return; }
+    if (mode === 'nations' && natUI.onClick(b)) return;
+    if (b.dataset.nations != null) { mode = 'nations'; $('#dialog').hidden = true; hideDice(); natUI.start(); return; }
     if (b.dataset.unknown != null) { mode = 'unknown'; $('#dialog').hidden = true; hideDice(); unkUI.start(); return; }
     if (b.dataset.expedition != null) { mode = 'expedition'; $('#dialog').hidden = true; hideDice(); expUI.start(); return; }
     if (b.dataset.menu != null) return openMenu();
@@ -583,7 +583,8 @@ async function start() {
   bind();
   expUI = createExpeditionUI({ $, esc, view, store, onMenu: openMenu });
   unkUI = createUnknownUI({ $, esc, view, store });
-  fogUI = createFogUI({ $, esc, view, store });
+  natUI = createNationsUI({ $, esc, view, store });
+  document.addEventListener('change', e => { if (mode === 'nations') natUI.onChange(e); });
   openMenu();       // menu principal: Campanha Solo, partida de 2 a 4, partidas guardadas
   // Jogar sem internet e instalar como aplicação (só em https ou localhost).
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').catch(() => {});

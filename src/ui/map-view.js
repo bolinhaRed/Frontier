@@ -197,6 +197,7 @@ export class MapView {
       if (h.color) { ctx.lineWidth = 7; ctx.strokeStyle = h.color; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 6)); }
       if (h.token != null) this._token(p.x, p.y + 52, h.token);
       if (h.flag) this._flag(p.x + 34, p.y - 62, h.flag);
+      if (h.pawn) this._pawn(p.x, p.y, h.pawn);
       if (h.mark) { ctx.lineWidth = 6; ctx.setLineDash([14, 10]); ctx.strokeStyle = h.mark; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 14)); ctx.setLineDash([]); }
     }
     const outline = (h, color, w) => { if (!h) return; const p = hexToPixel(h.q, h.r); ctx.lineWidth = Math.max(w, w / 2 / cam.z); ctx.strokeStyle = color; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 5)); };
@@ -212,6 +213,20 @@ export class MapView {
     ctx.lineWidth = 3; ctx.strokeStyle = '#2f2216'; ctx.stroke();
     ctx.fillStyle = hot ? '#a8321f' : '#2f2216'; ctx.font = `700 ${hot ? 28 : 25}px Alegreya, Georgia, serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), x, y + 1);
+    ctx.restore();
+  }
+
+  // Peão (marcador provisório): cabeça e corpo a tinta, na cor da raça, com a letra e o nível.
+  _pawn(x, y, w) {
+    const ctx = this.ctx; ctx.save();
+    if (w.selected) { ctx.beginPath(); ctx.arc(x, y + 6, 58, 0, Math.PI * 2); ctx.lineWidth = 8; ctx.strokeStyle = '#c8922e'; ctx.stroke(); }
+    ctx.fillStyle = 'rgba(47,34,22,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 46, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#2f2216'; ctx.fillStyle = w.color;
+    ctx.beginPath(); ctx.moveTo(x - 34, y + 44); ctx.quadraticCurveTo(x - 30, y - 4, x, y - 8); ctx.quadraticCurveTo(x + 30, y - 4, x + 34, y + 44); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, y - 26, 20, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fbf6ea'; ctx.font = '700 26px Alegreya, Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(w.letter, x, y + 20);
+    for (let i = 0; i < w.level; i++) { ctx.beginPath(); ctx.arc(x - (w.level - 1) * 9 + i * 18, y + 60, 6, 0, Math.PI * 2); ctx.fillStyle = '#c8922e'; ctx.fill(); ctx.lineWidth = 2; ctx.stroke(); }
     ctx.restore();
   }
 
