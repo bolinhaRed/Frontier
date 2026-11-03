@@ -6,6 +6,7 @@ import { PUBLIC_OBJECTIVES, PRIVATE_OBJECTIVES } from '../data/objectives.js';
 import { applyContribution, payMilestones } from './rules/regions.js';
 import { checkPublicObjectives } from './rules/objectives.js';
 import { award } from './points.js';
+import { placeBlightStart } from './rules/blight.js';
 import { hasSpot, riverComponents } from './rules/placement-b.js';
 import { returnCard } from './bag.js';
 import { PRESAGES } from '../data/deck.js';
@@ -72,7 +73,8 @@ export function createGame({ seed = 'FRONTIER', mode = 'A', players, scenario = 
   //    D2: o baralho de acontecimentos existe já, baralhado pela seed; sem efeitos até à etapa 6.
   if (scenario) {
     // Solo: sem objectivos públicos nem privados; o objectivo é o do território.
-    state.solo = { territory: scenario.id, name: scenario.name, main: scenario.main, challenges: scenario.challenges, relics: scenario.relics, achievedRound: null, concludedRound: null };
+    if (scenario.blight) { state.blight = { from: scenario.blight.from, rate: scenario.blight.rate, aim: scenario.blight.aim ?? 0.5, rateLate: scenario.blight.rateLate || null, engulfed: 0, lost: false }; placeBlightStart(state, scenario.blight.start); }
+    state.solo = { diceChoice: scenario.diceChoice !== false, territory: scenario.id, name: scenario.name, main: scenario.main, challenges: scenario.challenges, relics: scenario.relics, achievedRound: null, concludedRound: null };
     const rest = shuffle(Object.keys(EVENTS).filter(e => !scenario.eventOrder.includes(e)), asFn(state.rng));
     state.eventDeck = [...scenario.eventOrder, ...rest];
   } else {

@@ -6,7 +6,7 @@ local: sem servidor, sem contas e sem rede durante a partida.
 
 **FRONTIER 1.0 — etapas 0 a 10 concluídas.**
 
-- **Campanha Solo**: 13 territórios num mundo contínuo, estrelas, relíquias, fronteira herdada.
+- **Campanha Solo**: 13 territórios num mundo contínuo; em cada turno lanças 3 dados e escolhes 2; uma praga avança da borda e tens de a travar com Torres e Fortalezas; objectivo em lista de progresso; estrelas, relíquias, fronteira herdada.
 - **Free Frontier** e **Frontier Rules**: 2 a 4 jogadores no mesmo aparelho, pessoas ou IA (fácil, normal, difícil).
 - 10 acontecimentos, dados animados, «Como jogar», dicas em cada passo.
 - Gravação automática de várias partidas, exportar e importar.
@@ -36,7 +36,7 @@ sempre que há um push no `main`.
    upload pelo browser: deixa de fora as pastas e ficheiros que começam por ponto (`.github`, `.nojekyll`).
 2. No GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 3. Em **Actions**, espera que "Publicar no GitHub Pages" fique verde (1 a 2 minutos).
-4. O jogo fica em <https://bolinhared.github.io/Frontier/>.
+4. O jogo fica em <https://bolinhared.github.io/frontier/>.
 
 Primeira vez (repositório vazio), dentro desta pasta:
 

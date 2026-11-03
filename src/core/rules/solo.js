@@ -56,7 +56,7 @@ export function checkSolo(state) {
 
 // Resultado final: conquista (1 estrela) + 1 estrela por desafio cumprido, só se conquistou.
 export function soloResult(state) {
-  const won = state.solo.achievedRound != null;
+  const won = state.solo.achievedRound != null && !state.blight?.lost;   // a praga no Lago perde o território
   const challenges = state.solo.challenges.map(c => won && CHALLENGE_CHECKS[c.id](state, c));
   return { won, challenges, stars: won ? 1 + challenges.filter(Boolean).length : 0 };
 }

@@ -29,6 +29,7 @@ export function worldBoard(camp, selected, color) {
       for (const [q, r, wq, wr] of hexesOf(t)) {
         const c = at.get(q + ',' + r), mark = q === 0 && r === 0 ? sel : null;
         if (!c) { slots.push({ q: wq, r: wr }); continue; }
+        if (c.kind === 'blight') { cells.push({ q: wq, r: wr, atlas: 'deadlands', tile: 'hole', mark }); continue; }
         const tile = c.kind === 'site' ? SITES[c.site].tile : c.kind === 'lake' ? 'lake' : c.kind === 'deadtrees' ? 'deadtrees' : c.kind === 'volcano' ? 'vulcano'
           : c.structure ? STRUCTURES[c.structure].tile : TERRAINS[c.terrain]?.tile || 'plain';
         cells.push({ q: wq, r: wr, atlas: c.biome || 'greenlands', tile, color: c.owned && c.kind !== 'site' ? color : null, flag: c.kind === 'site' && c.explored ? color : null, mark });

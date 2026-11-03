@@ -120,25 +120,16 @@ label.btn { cursor: pointer; }
 .dice-layer.roll .die .pips { animation: flip .15s linear 3; }
 @keyframes flip { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(.04); } }
 .die i { border-radius: 50%; } .die i.on { background: var(--ink); }
-.die:nth-child(1) { transform: translateX(-46px) rotate(-8deg); } .die:nth-child(2) { transform: translateX(46px) rotate(7deg); }
+.die { transform: translateX(var(--x)) rotate(var(--r)); }
 .dice-sum { transform: translateY(70px); font: 700 34px var(--f-display, Georgia); color: var(--ink); background: var(--paper-3); border: 2px solid var(--ink); border-radius: 999px;
   min-width: 56px; padding: 0 12px; text-align: center; opacity: 0; transition: opacity .2s; }
 .dice-layer.landed .dice-sum { opacity: 1; }
-.dice-layer.roll .die:nth-child(1) { animation: throw1 .8s cubic-bezier(.2,.7,.3,1) both; }
-.dice-layer.roll .die:nth-child(2) { animation: throw2 .82s cubic-bezier(.2,.7,.3,1) both; }
-@keyframes throw1 {
-  0% { transform: translate(-60vw, 40vh) rotate(-300deg) scale(.7); }
-  55% { transform: translate(-40px, -18px) rotate(-30deg) scale(1.05); }
-  72% { transform: translate(-43px, 6px) rotate(-2deg); }
-  85% { transform: translate(-44px, 4px) rotate(-4deg); }
-  100% { transform: translateX(-46px) rotate(-8deg); }
-}
-@keyframes throw2 {
-  0% { transform: translate(-50vw, 48vh) rotate(-340deg) scale(.7); }
-  55% { transform: translate(52px, -22px) rotate(28deg) scale(1.05); }
-  72% { transform: translate(47px, 6px) rotate(3deg); }
-  85% { transform: translate(48px, 4px) rotate(4deg); }
-  100% { transform: translateX(46px) rotate(7deg); }
+.dice-layer.roll .die { animation: throw .8s cubic-bezier(.2,.7,.3,1) var(--d) both; }
+@keyframes throw {
+  0% { transform: translate(-55vw, 44vh) rotate(-320deg) scale(.7); }
+  55% { transform: translate(calc(var(--x) + 6px), -20px) rotate(calc(var(--r) * 4)) scale(1.05); }
+  72% { transform: translate(calc(var(--x) - 3px), 6px) rotate(calc(var(--r) / 3)); }
+  100% { transform: translateX(var(--x)) rotate(var(--r)); }
 }
 @media (max-width: 600px) { .die { width: 52px; height: 52px; padding: 7px; } .dice-sum { font-size: 28px; transform: translateY(58px); } }
 
@@ -157,3 +148,11 @@ label.btn { cursor: pointer; }
 @media (max-width: 760px) { .dice-layer { inset: 0 0 auto 0; height: 50%; } }
 .names select { font: inherit; font-size: 14px; min-height: 44px; border: 2px solid var(--rule); border-radius: 6px; background: var(--paper); padding: 0 6px; }
 .card .pres { position: absolute; top: 4px; right: 6px; color: #7a3fa0; font-size: 16px; }
+
+.modes { display: grid; gap: 8px; margin: 12px 0; }
+.modes .btn { display: grid; gap: 2px; text-align: left; padding: 10px 14px; min-height: 56px; }
+.modes .btn small { font: 400 13px var(--f-body); text-transform: none; letter-spacing: 0; opacity: .85; }
+.progress { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 6px; }
+.progress li span { display: block; }
+.progress li small { display: block; color: var(--ink-2); font-size: 12px; margin-left: 18px; }
+.warn { color: var(--wax); font-weight: 700; }

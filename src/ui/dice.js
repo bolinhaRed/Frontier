@@ -10,12 +10,13 @@ export function showDice(dice) {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!layer) { layer = document.createElement('div'); layer.className = 'dice-layer'; layer.setAttribute('aria-hidden', 'true'); document.querySelector('.app').append(layer); }
   clearTimeout(hideTimer);
-  layer.innerHTML = '<div class="die"><div class="pips"></div></div><div class="die"><div class="pips"></div></div><div class="dice-sum"></div>';
+  const n = dice.length, gap = n === 3 ? 84 : 92;
+  layer.innerHTML = dice.map((_, i) => `<div class="die" style="--x:${(i - (n - 1) / 2) * gap}px;--r:${[-8, 7, -4][i]}deg;--d:${i * 0.03}s"><div class="pips"></div></div>`).join('') + '<div class="dice-sum"></div>';
   const els = [...layer.querySelectorAll('.die')], sum = layer.querySelector('.dice-sum');
   layer.className = 'dice-layer show' + (reduce ? '' : ' roll');
   return new Promise(done => {
     const land = () => {
-      sum.textContent = dice[0] + dice[1];
+      sum.textContent = n === 2 ? dice[0] + dice[1] : 'Escolhe 2';
       layer.classList.add('landed');
       hideTimer = setTimeout(() => layer.classList.remove('show'), 1700);
       done();

@@ -18,12 +18,14 @@ import { checkPublicObjectives } from './rules/objectives.js';
 import { finalScoring } from './rules/scoring.js';
 import { startEvent, eventChooser, legalEventChoices, applyEventChoice, expireEffects } from './rules/events.js';
 import { checkSolo, soloResult } from './rules/solo.js';
+import { spreadBlight } from './rules/blight.js';
 
 // Por passo: que tipos de acção são aceites e como se aplicam.
 const STEPS = {
   setup: { setupPlace },
   roll: { roll },
   caravan: { caravan },
+  dicePick: { pickDice: { legal: roll.legalPick, apply: roll.applyPick } },
   place: { place, skipPlace: place, redrawHand: place },
   actions: { build, expand, explore, trade, endActions, concludeSolo: endActions },
   stones: { reorderEvents: { legal: explore.legalReorder, apply: explore.applyReorder } },
@@ -77,6 +79,7 @@ function endTurn(state) {
   if (pos < state.order.length - 1) { startTurn(state, state.order[pos + 1]); return; }
   // Fim da ronda. A partida acaba na última ronda ou na ronda em que o baralho se esgotou.
   expireEffects(state);
+  if (state.blight) { spreadBlight(state); if (state.blight.lost) { endGame(state); return; } }
   if (state.round >= state.maxRounds || state.deckExhausted) { endGame(state); return; }
   // No fim de cada 4 rondas completas (excepto a última): acontecimento. Escolhe primeiro o 1.º jogador da ronda seguinte.
   if (state.events !== false && state.round % 4 === 0) {
