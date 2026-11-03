@@ -14,25 +14,28 @@ import { STRUCTURES } from '../data/structures.js';
 import { EVENTS } from '../data/events.js';
 import { PUBLIC_OBJECTIVES, PRIVATE_OBJECTIVES } from '../data/objectives.js';
 import { ring } from '../core/hex.js';
-import { saveGame, loadGame } from '../storage/autosave.js';
+import { writeSave, listSaves, readSave, deleteSave, exportSave, importSave, newSaveId } from '../storage/saves.js';
+import { showDice, hideDice } from './dice.js';
+import { helpHTML } from './help.js';
 
 const COLORS = ['#a8321f', '#2c6a97', '#4f6b33', '#c8922e'];
 const RES = r => RESOURCE_NAMES[r];
 let state = null, view = null, chosen = null, picked = null, discard = null;
 let revealed = null, showPriv = false, lastMsg = '';      // revealed = jogador que já recebeu o aparelho
 const store = (() => { try { return window.localStorage; } catch { return null; } })();
-const persist = () => { if (store) saveGame(store, state); };
+let currentId = null, busy = false;
+const persist = () => { if (store && currentId) writeSave(store, currentId, state); };
 const STEP_NAMES = ['Dados', 'Colocar', 'Acções', 'Repor'];
 const STEP_INDEX = { roll: 0, caravan: 0, place: 1, actions: 2, stones: 2, refill: 3, limit: 3 };
 const needsCover = () => state && state.phase !== 'over' && state.active != null && revealed !== state.active;
 
 function newGame(names) {
   state = createGame({ seed: randomSeed(), players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i] })) });
-  chosen = picked = discard = null; revealed = null; lastMsg = '';
+  chosen = picked = discard = null; revealed = null; lastMsg = ''; currentId = newSaveId(); hideDice();
   $('#dialog').hidden = true; persist(); render(); fit();
 }
 function resume(saved) {
-  state = saved.state; chosen = picked = discard = null; revealed = null; lastMsg = '';
+  state = saved.state; currentId = saved.id; hideDice(); chosen = picked = discard = null; revealed = null; lastMsg = '';
   $('#dialog').hidden = true; render(); fit();
 }
 function fit() {
@@ -48,24 +51,39 @@ function openNewGame() {
     <div class="count">${[2, 3, 4].map(n => `<button class="btn small${draftNames.length === n ? ' primary' : ''}" data-count="${n}">${n} jogadores</button>`).join('')}</div>
     <div class="names">${draftNames.map((n, i) => `<label><i style="background:${COLORS[i]}"></i><input data-name="${i}" value="${esc(n)}" maxlength="16" aria-label="Nome do jogador ${i + 1}"></label>`).join('')}</div>
     ${state && state.phase !== 'over' ? '<p class="warn">A partida em curso será substituída.</p>' : ''}
-    <div class="row-btns">${state ? '<button class="btn" data-cancel>Cancelar</button>' : ''}<button class="btn primary" data-start>Começar</button></div></div>`;
+    <div class="row-btns"><button class="btn" data-cancel>Cancelar</button><button class="btn primary" data-start>Começar</button></div></div>`;
 }
-function openResume(saved) {
-  const s = saved.state, d = $('#dialog'); d.hidden = false;
-  const when = new Date(saved.savedAt).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
-  const where = s.phase === 'setup' ? 'preparação' : s.phase === 'over' ? 'partida terminada' : `ronda ${s.round} de ${s.maxRounds}`;
-  d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2><p>Há uma partida guardada: ${s.players.map(p => esc(p.name)).join(', ')} · ${where}.</p>
-    <p class="hint">Guardada em ${esc(when)}.</p>
-    <div class="row-btns"><button class="btn" data-open-new>Nova partida</button><button class="btn primary" data-continue>Continuar</button></div></div>`;
-  d._saved = saved;
+// Menu: partidas guardadas (continuar, exportar, apagar), importar, nova partida, como jogar.
+function openMenu(note = '') {
+  const d = $('#dialog'); d.hidden = false;
+  const saves = store ? listSaves(store) : [];
+  const when = iso => new Date(iso).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
+  d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2>
+    <div class="row-btns"><button class="btn primary" data-open-new>Nova partida</button><button class="btn" data-help>Como jogar</button>${state ? '<button class="btn" data-cancel>Voltar ao jogo</button>' : ''}</div>
+    ${note ? `<p class="warn">${esc(note)}</p>` : ''}
+    <h3>Partidas guardadas</h3>
+    ${saves.length ? `<ul class="saves">${saves.map(g => `<li${g.id === currentId ? ' class="cur"' : ''}><div><b>${g.players.map(esc).join(', ')}</b><small>${esc(g.where)} · ${esc(when(g.savedAt))}</small></div>
+      <span><button class="btn small primary" data-load="${g.id}">${g.over ? 'Ver' : 'Continuar'}</button><button class="btn small" data-export="${g.id}">Exportar</button><button class="btn small" data-del="${g.id}">Apagar</button></span></li>`).join('')}</ul>`
+      : '<p class="hint">Ainda não há partidas guardadas.</p>'}
+    <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
+    <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p></div>`;
 }
 
 function act(a) {
   const before = state;
   const r = applyAction(state, a);
   if (!r.ok) { sound.play('error'); $('#msg').textContent = r.error; return; }
-  state = r.state; lastMsg = describe(before, a); $('#msg').textContent = lastMsg;
+  state = r.state; lastMsg = describe(before, a);
   persist();
+  if (a.type === 'roll') {           // o motor já lançou; a animação mostra esse resultado
+    busy = true;
+    showDice(state.turn.dice).then(() => { busy = false; finishAct(a); });
+    return;
+  }
+  finishAct(a);
+}
+function finishAct(a) {
+  $('#msg').textContent = lastMsg;
   sound.play(['setupPlace', 'place', 'expand', 'build'].includes(a.type) ? 'place' : 'card');
   const p = state.players[state.active];
   if (!p?.hand.includes(chosen)) chosen = null;
@@ -184,12 +202,13 @@ function render() {
   $('#steps').innerHTML = stepsHTML();
   const s = state, p = s.players[s.active];
   let head = '', tools = '', handBtns = 'disabled';
+  const diceTxt = s.turn?.dice ? ` · dados ${s.turn.dice[0]} + ${s.turn.dice[1]} = ${s.turn.dice[0] + s.turn.dice[1]}` : '';
   if (s.phase === 'setup') {
     head = `Preparação · ${esc(p.name)} coloca a carta que tirou`;
     $('#hand').innerHTML = covered ? '' : cardHTML(s.setup.card, 'disabled');
     tools = '<span class="hint">Toca num hexágono marcado.</span>';
   } else if (s.phase === 'turn') {
-    head = `Ronda ${s.round} de ${s.maxRounds} · ${esc(p.name)}`;
+    head = `Ronda ${s.round} de ${s.maxRounds} · ${esc(p.name)}${diceTxt}`;
     const L = legalActions(s);
     if (s.step === 'roll') tools = btn('Lançar os dados', { type: 'roll', player: s.active }, 'primary');
     if (s.step === 'caravan') tools = '<span class="hint">Saiu 7 (Caravana). Escolhe:</span>' + L.map(a => btn(a.option === 'trade' ? 'Trocas a 2 por 1 neste turno' : '+1 ' + RES(a.resource), a)).join('');
@@ -247,7 +266,19 @@ function onHex(h) {
 function bind() {
   document.addEventListener('click', e => {
     sound.unlock();
-    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
+    if (b.dataset.menu != null) return openMenu();
+    if (b.dataset.help != null) { $('#help').innerHTML = helpHTML(); $('#help').hidden = false; return; }
+    if (b.dataset.closeHelp != null) { $('#help').hidden = true; return; }
+    if (b.dataset.load) { const g = readSave(store, b.dataset.load); return g ? resume(g) : openMenu('Não foi possível abrir essa gravação.'); }
+    if (b.dataset.del) { if (confirm('Apagar esta partida guardada?')) { deleteSave(store, b.dataset.del); if (b.dataset.del === currentId) { currentId = null; state = null; } openMenu(); } return; }
+    if (b.dataset.export) {
+      const txt = exportSave(store, b.dataset.export); if (!txt) return openMenu('Não foi possível exportar.');
+      const url = URL.createObjectURL(new Blob([txt], { type: 'application/json' }));
+      const link = Object.assign(document.createElement('a'), { href: url, download: `frontier-${new Date().toISOString().slice(0, 10)}.json` });
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return;
+    }
     if (b.dataset.act) return act(JSON.parse(b.dataset.act));
     if (b.dataset.buy) return act({ type: 'buyMarket', player: state.active, card: b.dataset.card });
     if (b.dataset.card) { chosen = chosen === b.dataset.card ? null : b.dataset.card; picked = null; render(); return; }
@@ -259,8 +290,13 @@ function bind() {
     if (b.dataset.openNew != null) { draftNames = state ? state.players.map(p => p.name) : draftNames; openNewGame(); return; }
     if (b.dataset.count) { const n = +b.dataset.count; draftNames = Array.from({ length: n }, (_, i) => draftNames[i] || 'Jogador ' + (i + 1)); openNewGame(); return; }
     if (b.dataset.start != null) return newGame(draftNames);
-    if (b.dataset.cancel != null) { $('#dialog').hidden = true; return; }
-    if (b.dataset.continue != null) return resume($('#dialog')._saved);
+    if (b.dataset.cancel != null) { if (state) $('#dialog').hidden = true; else openMenu(); return; }
+  });
+  document.addEventListener('change', async e => {
+    if (e.target.dataset?.import == null || !e.target.files[0]) return;
+    const r = importSave(store, await e.target.files[0].text());
+    if (r.error) return openMenu(r.error);
+    resume(readSave(store, r.id));
   });
   document.addEventListener('input', e => { const i = e.target.dataset?.name; if (i != null) draftNames[+i] = e.target.value; });
   const mb = $('#music');
@@ -276,8 +312,7 @@ async function start() {
   catch (e) { $('#head').textContent = e.message + '. Abre o jogo através de um servidor local (ver README).'; return; }
   view = new MapView($('#map'), { onSelect: onHex });
   bind();
-  const saved = store && loadGame(store);
-  if (saved) openResume(saved); else openNewGame();
+  if (store && listSaves(store).length) openMenu(); else openNewGame();
   if (location.hash === '#debug') window.FRONTIER = { get state() { return state; }, set state(v) { state = v; render(); }, view, act };
 }
 start();

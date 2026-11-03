@@ -4,10 +4,9 @@ Jogo de estratégia com terrenos hexagonais, inspirado em Carcassonne, Catan e n
 2 a 4 jogadores, humanos ou IA, no mesmo dispositivo. PWA em HTML, CSS e JavaScript, exclusivamente
 local: sem servidor, sem contas e sem rede durante a partida.
 
-**Estado: etapa 3 de 10.** Free Frontier completo, para 2 a 4 jogadores no mesmo PC ou telemóvel:
-ecrã de passagem do aparelho entre jogadores (a mão e o objectivo privado só aparecem a quem está a
-jogar), gravação automática depois de cada acção e retoma ao reabrir a página. Ainda sem os 2
-acontecimentos (etapa 6). Próxima etapa: gravações múltiplas, exportar e importar.
+**Estado: etapa 4.** Free Frontier completo para 2 a 4 jogadores no mesmo PC ou telemóvel, com
+ecrã de passagem do aparelho, dados animados, «Como jogar», gravação automática de várias partidas e
+exportar ou importar partidas entre aparelhos (Menu). Próxima etapa: acontecimentos. Depois: campanha Solo.
 
 ## Correr
 
