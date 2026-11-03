@@ -1,0 +1,45 @@
+{
+ "tile": {
+  "w": 238,
+  "h": 207,
+  "pad": 2,
+  "cols": 6,
+  "cw": 242,
+  "ch": 211
+ },
+ "order": [
+  "road_straight",
+  "road_fork",
+  "road_bend",
+  "river_straight",
+  "river_bend2",
+  "river_bend"
+ ],
+ "openings": {
+  "road_straight": [
+   3,
+   0
+  ],
+  "road_bend": [
+   3,
+   1
+  ],
+  "road_fork": [
+   3,
+   4,
+   0
+  ],
+  "river_straight": [
+   3,
+   0
+  ],
+  "river_bend": [
+   3,
+   1
+  ],
+  "river_bend2": [
+   2,
+   0
+  ]
+ }
+}

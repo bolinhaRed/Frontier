@@ -156,3 +156,6 @@ label.btn { cursor: pointer; }
 .progress li span { display: block; }
 .progress li small { display: block; color: var(--ink-2); font-size: 12px; margin-left: 18px; }
 .warn { color: var(--wax); font-weight: 700; }
+.panel.expedition .row h2 { display: none; }
+.ex-tile .card { cursor: default; }
+.card .art { transition: transform .15s ease; }

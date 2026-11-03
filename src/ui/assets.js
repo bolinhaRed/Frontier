@@ -1,7 +1,7 @@
 // FRONTIER — carregamento dos atlas de tiles e níveis de detalhe (mipmaps).
 // Reutilizado do projecto original (assets.js), com os caminhos da nova estrutura.
 const TILES = './assets/tiles/';
-let meta = null, art = null;
+let meta = null, art = null, paths = null;
 const atlases = {};   // nome → [nível0 (img), nível1 (½), nível2 (¼), nível3 (⅛)]
 const index = {};     // nome do tile → posição no atlas
 
@@ -15,6 +15,11 @@ export async function loadAtlases(onProgress = () => {}) {
   meta = await r.json();
   meta.order.forEach((n, i) => { index[n] = i; });
   try { art = await (await fetch('./assets/art/art.json')).json(); } catch { art = null; }
+  // peças de estrada e rio (modo Expedição): uma folha por bioma
+  try {
+    paths = await (await fetch(TILES + 'paths.json')).json();
+    await Promise.all(meta.atlases.map(async n => { atlases['paths-' + n] = [await loadImage(TILES + 'paths-' + n + '.webp')]; }));
+  } catch { paths = null; }
   let done = 0;
   await Promise.all(meta.atlases.map(async n => {
     atlases[n] = [await loadImage(TILES + n + '.webp')];
@@ -39,7 +44,8 @@ export function tileSource(atlasName, tile, scale) {
   const level = scale > 0.55 ? 0 : scale > 0.28 ? 1 : scale > 0.14 ? 2 : 3;
   const img = mip(atlasName, level);
   const f = 1 / (1 << level);
-  const t = meta.tile, i = index[tile] ?? index.plain;
+  const isPath = atlasName.startsWith('paths-');
+  const t = isPath ? paths.tile : meta.tile, i = isPath ? paths.order.indexOf(tile) : (index[tile] ?? index.plain);
   const col = i % t.cols, row = Math.floor(i / t.cols);
   return [img, (col * t.cw + t.pad) * f, (row * t.ch + t.pad) * f, t.w * f, t.h * f];
 }
@@ -61,4 +67,10 @@ export function artStyle(name, displayW) {
   const c = art.cell, s = displayW / c.w, cw = c.w + c.pad * 2, ch = c.h + c.pad * 2;
   const rows = Math.ceil(P.names.length / P.cols);
   return `background:url(./assets/art/${pack}.webp) ${-((i % P.cols) * cw + c.pad) * s}px ${-(Math.floor(i / P.cols) * ch + c.pad) * s}px / ${P.cols * cw * s}px ${rows * ch * s}px no-repeat;width:${displayW}px;height:${Math.round(c.h * s)}px`;
+}
+
+// Peça de estrada ou rio num elemento HTML (modo Expedição).
+export function pathStyle(biome, kind, displayW) {
+  const t = paths.tile, i = paths.order.indexOf(kind), s = displayW / t.w;
+  return `background:url(${TILES}paths-${biome === 'foundation' ? 'sketch' : biome}.webp) ${-(i * t.cw + t.pad) * s}px ${-t.pad * s}px / ${paths.order.length * t.cw * s}px ${t.ch * s}px no-repeat;width:${displayW}px;height:${Math.round(t.h * s)}px`;
 }

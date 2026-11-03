@@ -19,6 +19,8 @@ import { showDice, hideDice } from './dice.js';
 import { helpHTML } from './help.js';
 import { chooseAction } from '../ai/ai.js';
 import { objectiveItems, blightText } from './objective.js';
+import { createExpeditionUI } from './expedition.js';
+let expUI = null;
 import { worldBoard, worldSideHTML, territoryHTML, territoryAt } from './world.js';
 import { loadCampaign, saveCampaign, recordResult, takeRelic, toggleRelic, borderFor, territory } from '../storage/campaign.js';
 import { buildScenario } from '../core/scenario.js';
@@ -80,6 +82,7 @@ function openMenu(note = '') {
       <button class="btn primary" data-world><b>Campanha Solo</b><small>Sozinho, território a território, contra a praga</small></button>
       <button class="btn" data-open-new="A"><b>Free Frontier</b><small>2 a 4 · contra a IA ou com amigos · regras base</small></button>
       <button class="btn" data-open-new="B"><b>Frontier Rules</b><small>2 a 4 · contra a IA ou com amigos · biomas, rios e presságios</small></button>
+      <button class="btn" data-expedition><b>Expedição</b><small>Sozinho, ao estilo Dorfromantik: encaixa peças, liga estradas e rios, cumpre missões. Sem dados. ${expUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
     </div>
     <div class="row-btns"><button class="btn small" data-help>Como jogar</button>${tips ? '' : '<button class="btn small" data-tips-on>Mostrar dicas</button>'}${state && mode === 'game' ? '<button class="btn small" data-cancel>Voltar ao jogo</button>' : ''}</div>
     ${note ? `<p class="warn">${esc(note)}</p>` : ''}
@@ -89,7 +92,7 @@ function openMenu(note = '') {
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
     <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
-    <p class="hint">Versão 1.1</p></div>`;
+    <p class="hint">Versão 1.2</p></div>`;
 }
 
 function act(a) {
@@ -396,6 +399,8 @@ function stepsHTML() {
 
 function render() {
   if (mode === 'world') return renderWorld();
+  if (mode === 'expedition') return expUI.render();
+  $('.panel').classList.remove('expedition');
   if (humans().length === 1 && who() != null && !isAI(who())) revealed = who();   // uma só pessoa: nunca é preciso passar o aparelho
   const covered = needsCover();
   $('#cover').hidden = !covered;
@@ -474,6 +479,7 @@ function render() {
 
 function onHex(h) {
   if (!h) return;
+  if (mode === 'expedition') return expUI.onHex(h);
   if (mode === 'world') { const t = territoryAt(h.q, h.r); selT = t ? t.id : null; renderWorld(); return; }
   const s = state, k = h.q + ',' + h.r;
   if (isAI(who())) return;
@@ -501,6 +507,8 @@ function bind() {
   document.addEventListener('click', e => {
     sound.unlock();
     const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
+    if (mode === 'expedition' && expUI.onClick(b)) return;
+    if (b.dataset.expedition != null) { mode = 'expedition'; $('#dialog').hidden = true; hideDice(); expUI.start(); return; }
     if (b.dataset.menu != null) return openMenu();
     if (b.dataset.tipsOn != null) { tips = true; try { localStorage.setItem('frontier.tips', '1'); } catch {} openMenu(); return; }
     if (b.dataset.tips != null) { tips = false; try { localStorage.setItem('frontier.tips', '0'); } catch {} render(); return; }
@@ -559,6 +567,7 @@ async function start() {
   catch (e) { $('#head').textContent = e.message + '. Abre o jogo através de um servidor local (ver README).'; return; }
   view = new MapView($('#map'), { onSelect: onHex });
   bind();
+  expUI = createExpeditionUI({ $, esc, view, store, onMenu: openMenu });
   openMenu();       // menu principal: Campanha Solo, partida de 2 a 4, partidas guardadas
   // Jogar sem internet e instalar como aplicação (só em https ou localhost).
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').catch(() => {});
