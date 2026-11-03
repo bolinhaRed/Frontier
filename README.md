@@ -29,7 +29,7 @@ sempre que há um push no `main`.
    upload pelo browser: deixa de fora as pastas e ficheiros que começam por ponto (`.github`, `.nojekyll`).
 2. No GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 3. Em **Actions**, espera que "Publicar no GitHub Pages" fique verde (1 a 2 minutos).
-4. O jogo fica em <https://bolinhared.github.io/frontier/>.
+4. O jogo fica em <https://bolinhared.github.io/Frontier/>.
 
 Primeira vez (repositório vazio), dentro desta pasta:
 
