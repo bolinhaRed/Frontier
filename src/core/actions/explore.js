@@ -36,6 +36,7 @@ export function apply(state, a) {
   award(state, state.active, 'sites', site.points);
   if (site.reward?.choose) a.take.forEach(r => { p.resources[r] += 1; });
   if (site.reward?.stone) p.resources.stone += site.reward.stone;
+  if (state.balance.exploreBonus) for (const [r, n] of Object.entries(state.balance.exploreBonus)) p.resources[r] += n;   // Terras Secas
   if (site.reward?.triggerEvent) { startEvent(state, state.active); return; }   // Cemitério: o próximo acontecimento, já
   if (site.reward?.peekEvents) {
     const n = Math.min(site.reward.peekEvents, state.eventDeck.length);

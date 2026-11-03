@@ -20,7 +20,8 @@ import { helpHTML } from './help.js';
 import { chooseAction } from '../ai/ai.js';
 import { objectiveItems, blightText } from './objective.js';
 import { createExpeditionUI } from './expedition.js';
-let expUI = null;
+import { createUnknownUI } from './unknown.js';
+let expUI = null, unkUI = null;
 import { worldBoard, worldSideHTML, territoryHTML, territoryAt } from './world.js';
 import { loadCampaign, saveCampaign, recordResult, takeRelic, toggleRelic, borderFor, territory } from '../storage/campaign.js';
 import { buildScenario } from '../core/scenario.js';
@@ -82,6 +83,7 @@ function openMenu(note = '') {
       <button class="btn primary" data-world><b>Campanha Solo</b><small>Sozinho, território a território, contra a praga</small></button>
       <button class="btn" data-open-new="A"><b>Free Frontier</b><small>2 a 4 · contra a IA ou com amigos · regras base</small></button>
       <button class="btn" data-open-new="B"><b>Frontier Rules</b><small>2 a 4 · contra a IA ou com amigos · biomas, rios e presságios</small></button>
+      <button class="btn primary" data-unknown><b>Terras Desconhecidas</b><small>Sozinho: cartografa uma região com um Explorador, liga Aldeias e locais, 3 capítulos com objectivos. Sem dados. ${unkUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
       <button class="btn" data-expedition><b>Expedição</b><small>Sozinho, ao estilo Dorfromantik: encaixa peças, liga estradas e rios, cumpre missões. Sem dados. ${expUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
     </div>
     <div class="row-btns"><button class="btn small" data-help>Como jogar</button>${tips ? '' : '<button class="btn small" data-tips-on>Mostrar dicas</button>'}${state && mode === 'game' ? '<button class="btn small" data-cancel>Voltar ao jogo</button>' : ''}</div>
@@ -92,7 +94,7 @@ function openMenu(note = '') {
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
     <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
-    <p class="hint">Versão 1.3</p></div>`;
+    <p class="hint">Versão 1.4</p></div>`;
 }
 
 function act(a) {
@@ -167,9 +169,10 @@ function boardView() {
   if ((step === 'setup' || step === 'place') && !isAI(who())) legalActions(state).filter(a => (a.type === 'setupPlace' || a.type === 'place') && (!chosen || a.type === 'setupPlace' || a.card === chosen)).forEach(a => legal.add(a.q + ',' + a.r));
   if (step === 'actions' && chosen) legalActions(state).filter(a => a.type === 'expand' && a.card === chosen).forEach(a => legal.add(a.q + ',' + a.r));
   const doable = new Set(step === 'actions' && !chosen && !needsCover() ? legalActions(state).filter(a => a.type === 'build' || a.type === 'explore').map(a => a.q + ',' + a.r) : []);
+  const threat = new Set(state.blight?.threat || []);
   for (const [k, c] of Object.entries(state.board)) {
     const [q, r] = parseKey(k); used.add(k);
-    const mark = picked === k ? '#c8922e' : doable.has(k) ? '#3f7a3a' : null;
+    const mark = picked === k ? '#c8922e' : threat.has(k) ? '#d9822b' : doable.has(k) ? '#3f7a3a' : null;
     if (c.kind === 'site') cells.push({ q, r, atlas: 'greenlands', tile: SITES[c.site].tile, flag: c.explored != null ? state.players[c.explored].color : null, mark });
     else if (c.kind === 'lake') cells.push({ q, r, atlas: c.biome, tile: 'lake', mark });
     else if (c.kind === 'blight') cells.push({ q, r, atlas: 'deadlands', tile: 'hole', mark: mark || '#7a2f8f' });
@@ -181,7 +184,7 @@ function boardView() {
   if (pending) { const a = pending.opts[pending.i], c = state.cards[a.card || state.setup.card]; cells.push({ q: a.q, r: a.r, atlas: c.biome, tile: TERRAINS[c.terrain].tile, rot: a.rot * Math.PI / 3, mark: '#c8922e' }); used.add(a.q + ',' + a.r); }
   const R = Math.max(4, ...[...used].map(k => { const [q, r] = parseKey(k); return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2 + 2; }));
   const slots = [];
-  for (let d = 1; d <= R; d++) for (const [q, r] of ring(0, 0, d)) { const k = q + ',' + r; if (!used.has(k)) slots.push({ q, r, legal: legal.has(k) }); }
+  for (let d = 1; d <= R; d++) for (const [q, r] of ring(0, 0, d)) { const k = q + ',' + r; if (!used.has(k)) slots.push({ q, r, legal: legal.has(k), threat: threat.has(k) }); }
   return { cells, slots };
 }
 
@@ -230,9 +233,9 @@ function finalHTML() {
 // Opções para o hexágono escolhido no passo das acções (construir, explorar).
 function hexOptions(k) {
   const [q, r] = parseKey(k);
-  const L = legalActions(state).filter(a => (a.type === 'build' || a.type === 'explore') && a.q === q && a.r === r);
+  const L = legalActions(state).filter(a => (a.type === 'build' || a.type === 'explore' || a.type === 'purify') && a.q === q && a.r === r);
   if (!L.length) return '<span class="hint">Nada a fazer neste hexágono.</span>';
-  return L.map(a => a.type === 'build'
+  return L.map(a => a.type === 'purify' ? btn('Purificar (2 Provisões + 1 Pedra)', a, 'primary') : a.type === 'build'
     ? btn(`Construir ${STRUCTURES[a.structure].name} (${resText(STRUCTURES[a.structure].cost)}, +${a.structure === 'castle' ? 3 : STRUCTURES[a.structure].points} pts)`, a)
     : btn(`Explorar ${SITES[state.board[k].site].name} (2 Provisões${a.take ? ', recebe ' + a.take.map(RES).join(' + ') : ''})`, a)).join('');
 }
@@ -398,8 +401,10 @@ function stepsHTML() {
 }
 
 function render() {
+  $('.panel').classList.remove('unknown');
   if (mode === 'world') return renderWorld();
   if (mode === 'expedition') return expUI.render();
+  if (mode === 'unknown') return unkUI.render();
   $('.panel').classList.remove('expedition');
   if (humans().length === 1 && who() != null && !isAI(who())) revealed = who();   // uma só pessoa: nunca é preciso passar o aparelho
   const covered = needsCover();
@@ -480,6 +485,7 @@ function render() {
 function onHex(h) {
   if (!h) return;
   if (mode === 'expedition') return expUI.onHex(h);
+  if (mode === 'unknown') return unkUI.onHex(h);
   if (mode === 'world') { const t = territoryAt(h.q, h.r); selT = t ? t.id : null; renderWorld(); return; }
   const s = state, k = h.q + ',' + h.r;
   if (isAI(who())) return;
@@ -499,7 +505,7 @@ function onHex(h) {
   }
   if (s.step === 'actions') {
     if (chosen && !s.board[k]) return tryPlace('expand', chosen);
-    picked = s.board[k] ? k : null; render();
+    picked = s.board[k] || (s.blight?.threat || []).includes(k) ? k : null; render();
   }
 }
 
@@ -508,6 +514,8 @@ function bind() {
     sound.unlock();
     const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
     if (mode === 'expedition' && expUI.onClick(b)) return;
+    if (mode === 'unknown' && unkUI.onClick(b)) return;
+    if (b.dataset.unknown != null) { mode = 'unknown'; $('#dialog').hidden = true; hideDice(); unkUI.start(); return; }
     if (b.dataset.expedition != null) { mode = 'expedition'; $('#dialog').hidden = true; hideDice(); expUI.start(); return; }
     if (b.dataset.menu != null) return openMenu();
     if (b.dataset.tipsOn != null) { tips = true; try { localStorage.setItem('frontier.tips', '1'); } catch {} openMenu(); return; }
@@ -568,6 +576,7 @@ async function start() {
   view = new MapView($('#map'), { onSelect: onHex });
   bind();
   expUI = createExpeditionUI({ $, esc, view, store, onMenu: openMenu });
+  unkUI = createUnknownUI({ $, esc, view, store });
   openMenu();       // menu principal: Campanha Solo, partida de 2 a 4, partidas guardadas
   // Jogar sem internet e instalar como aplicação (só em https ou localhost).
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').catch(() => {});

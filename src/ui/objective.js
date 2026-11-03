@@ -64,8 +64,9 @@ export function objectiveItems(s) {
 
 export function blightText(s) {
   if (!s.blight) return '';
-  const d = blightDistance(s);
+  const d = blightDistance(s), n = (s.blight.threat || []).length;
+  const warn = n ? ` ${n} hexágono${n > 1 ? 's' : ''} ameaçado${n > 1 ? 's' : ''} (contorno laranja): fica${n > 1 ? 'm' : ''} corrompido${n > 1 ? 's' : ''} no fim da ronda, a não ser que lhe${n > 1 ? 's' : ''} ponhas uma Torre ou Fortaleza ao lado ou os purifiques (2 Provisões + 1 Pedra).` : '';
   const when = s.round < s.blight.from ? `começa a avançar no fim da ronda ${s.blight.from}` : 'avança no fim de cada ronda';
-  return d <= 1 ? `⚠ A praga está ao lado do Lago… mais um passo e perdes o território. Trava-a com Torres de vigia ou Fortalezas.`
-    : `A praga ${when}; está a ${d} hexágonos do Lago. Se lá chegar, perdes o território. Torres de vigia e Fortalezas protegem-se a si e aos vizinhos.`;
+  return (d <= 1 ? `⚠ A praga está ao lado do Lago… mais um passo e perdes o território.`
+    : `A praga ${when}; está a ${d} hexágonos do Lago. Se lá chegar, perdes o território. Torres de vigia e Fortalezas protegem-se a si e aos vizinhos.`) + warn;
 }

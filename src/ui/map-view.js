@@ -188,6 +188,10 @@ export class MapView {
     const legal = new Path2D(); let anyLegal = false;
     (this.board.slots || []).forEach((h, i) => { if (h.legal) { anyLegal = true; this._hexPath(legal, this.slotPos[i].x, this.slotPos[i].y, HEX_SIZE - 8); } });
     if (anyLegal) { ctx.fillStyle = 'rgba(200,146,46,.14)'; ctx.fill(legal); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(156,106,32,.55)'; ctx.stroke(legal); }
+    // hexágonos vazios ameaçados (Solo: praga anunciada)
+    const threat = new Path2D(); let anyThreat = false;
+    (this.board.slots || []).forEach((h, i) => { if (h.threat) { anyThreat = true; this._hexPath(threat, this.slotPos[i].x, this.slotPos[i].y, HEX_SIZE - 10); } });
+    if (anyThreat) { ctx.fillStyle = 'rgba(122,47,143,.18)'; ctx.fill(threat); ctx.setLineDash([12, 8]); ctx.lineWidth = 5; ctx.strokeStyle = '#d9822b'; ctx.stroke(threat); ctx.setLineDash([]); }
     for (const { h, p } of this.order) this._tile(h.atlas, h.tile, p, h.rot || 0);
     for (const { h, p } of this.order) {
       if (h.color) { ctx.lineWidth = 7; ctx.strokeStyle = h.color; ctx.stroke(this._hexPath(new Path2D(), p.x, p.y, HEX_SIZE - 6)); }

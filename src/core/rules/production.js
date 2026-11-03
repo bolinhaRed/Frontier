@@ -9,6 +9,7 @@ export function produce(state, sum) {
   for (const [k, c] of Object.entries(state.board)) {
     if (c.kind !== 'terrain' || c.owner == null || c.token !== sum || !TERRAINS[c.terrain]) continue;
     if (c.blocks && Object.keys(c.blocks).length) continue;    // efeitos temporários dos acontecimentos
+    if (state.solo?.winterEvery && state.round % state.solo.winterEvery === 0 && c.terrain === 'plain') continue;   // Gelo Eterno: Inverno
     const res = TERRAINS[c.terrain].resource, gain = { [res]: 1 };
     const bonus = c.structure ? STRUCTURES[c.structure].bonus : null;
     if (bonus?.same) gain[res] += bonus.same;

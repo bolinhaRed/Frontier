@@ -13,6 +13,7 @@ import * as trade from './actions/trade.js';
 import * as endActions from './actions/end-actions.js';
 import * as refill from './actions/refill.js';
 import * as discard from './actions/discard.js';
+import * as purify from './actions/purify.js';
 import { startTurn } from './state.js';
 import { checkPublicObjectives } from './rules/objectives.js';
 import { finalScoring } from './rules/scoring.js';
@@ -27,7 +28,7 @@ const STEPS = {
   caravan: { caravan },
   dicePick: { pickDice: { legal: roll.legalPick, apply: roll.applyPick } },
   place: { place, skipPlace: place, redrawHand: place },
-  actions: { build, expand, explore, trade, endActions, concludeSolo: endActions },
+  actions: { build, expand, explore, trade, purify, endActions, concludeSolo: endActions },
   stones: { reorderEvents: { legal: explore.legalReorder, apply: explore.applyReorder } },
   refill: { drawDeck: refill, buyMarket: refill },
   limit: { discard },

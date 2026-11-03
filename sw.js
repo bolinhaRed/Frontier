@@ -3,7 +3,7 @@
 // sem rede, usa a cópia guardada. Imagens e fontes: cópia guardada primeiro.
 // Uma versão nova nunca interrompe uma partida: só entra quando a página é aberta de novo, e a partida
 // está gravada depois de cada acção.
-const CACHE = 'frontier-1.3';
+const CACHE = 'frontier-1.4';
 const CORE = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(CORE))); self.skipWaiting(); });

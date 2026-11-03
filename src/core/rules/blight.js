@@ -33,25 +33,51 @@ function candidates(state) {
   return [...out].sort();
 }
 
-// Fim de ronda: avança a praga. Devolve os hexágonos tomados.
+// Fim de ronda (praga anunciada): 1) os hexágonos ameaçados na ronda anterior ficam corrompidos, se ainda
+// não estiverem protegidos; 2) a praga escolhe os próximos ameaçados, que ficam visíveis durante uma ronda.
+// Começa a ameaçar no fim da ronda «from − 1» e a corromper no fim da ronda «from».
 export function spreadBlight(state) {
-  const b = state.blight; if (!b || state.round < b.from) return [];
-  const steps = b.rateLate && state.round >= b.rateLate.round ? b.rateLate.rate : b.rate;
+  const b = state.blight; if (!b) return [];
+  b.threat = b.threat || [];
   const taken = [];
-  for (let i = 0; i < steps; i++) {
-    const C = candidates(state); if (!C.length) break;
-    let k;
-    if (nextFloat(state.rng) < (b.aim ?? 0.5)) { const d = c => { const [q, r] = c.split(',').map(Number); return distance(0, 0, q, r); }; const m = Math.min(...C.map(d)); const best = C.filter(c => d(c) === m); k = best[nextInt(state.rng, best.length)]; }
-    else k = C[nextInt(state.rng, C.length)];
-    const c = state.board[k];
-    if (c) { b.engulfed++; state.board[k] = { ...c, kind: 'blight', owner: null, structure: null, blocks: {} }; }
-    else state.board[k] = { kind: 'blight', owner: null };
-    taken.push(k);
+  if (state.round >= b.from) {
+    for (const k of b.threat) {
+      const c = state.board[k];
+      if (protectedHex(state, k) || (c && c.kind !== 'terrain' && c.kind !== 'deadtrees' && c.kind !== 'volcano')) continue;
+      if (c) { b.engulfed++; state.board[k] = { ...c, kind: 'blight', owner: null, structure: null, blocks: {} }; }
+      else state.board[k] = { kind: 'blight', owner: null };
+      taken.push(k);
+    }
   }
+  b.threat = [];
   if (taken.some(k => state.board[k].card)) rebuildRegions(state);
   b.lastTaken = taken;
-  if (Object.entries(state.board).some(([k, c]) => c.kind === 'blight' && distance(0, 0, ...k.split(',').map(Number)) === 1)) b.lost = true;
+  if (Object.entries(state.board).some(([k, c]) => c.kind === 'blight' && distance(0, 0, ...k.split(',').map(Number)) === 1)) { b.lost = true; return taken; }
+  if (state.round >= b.from - 1) {
+    const steps = b.rateLate && state.round + 1 >= b.rateLate.round ? b.rateLate.rate : b.rate;
+    const C = candidates(state);
+    for (let i = 0; i < steps && C.length; i++) {
+      let k;
+      if (nextFloat(state.rng) < (b.aim ?? 0.5)) { const d = c => { const [q, r] = c.split(',').map(Number); return distance(0, 0, q, r); }; const m = Math.min(...C.map(d)); const best = C.filter(c => d(c) === m); k = best[nextInt(state.rng, best.length)]; }
+      else k = C[nextInt(state.rng, C.length)];
+      b.threat.push(k); C.splice(C.indexOf(k), 1);
+    }
+  }
   return taken;
+}
+
+// Purificar (Solo): 2 Provisões + 1 Pedra, uma vez por turno. Limpa um hexágono ameaçado, ou um hexágono de praga
+// que não engoliu um terreno (sem carta) e fica ao lado de um terreno teu.
+export const PURIFY_COST = { food: 2, stone: 1 };
+export function purifyTargets(state) {
+  const b = state.blight; if (!b) return [];
+  const out = [...(b.threat || [])];
+  for (const [k, c] of Object.entries(state.board)) {
+    if (c.kind !== 'blight' || c.card) continue;
+    const [q, r] = k.split(',').map(Number);
+    if (neighbors(q, r).some(([a, d]) => state.board[key(a, d)]?.owner === 0)) out.push(k);
+  }
+  return [...new Set(out)].sort();
 }
 
 // Distância da praga ao Lago (hexágonos que ainda faltam até ficar ao lado dele).

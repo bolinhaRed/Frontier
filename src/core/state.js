@@ -74,7 +74,7 @@ export function createGame({ seed = 'FRONTIER', mode = 'A', players, scenario = 
   if (scenario) {
     // Solo: sem objectivos públicos nem privados; o objectivo é o do território.
     if (scenario.blight) { state.blight = { from: scenario.blight.from, rate: scenario.blight.rate, aim: scenario.blight.aim ?? 0.5, rateLate: scenario.blight.rateLate || null, engulfed: 0, lost: false }; placeBlightStart(state, scenario.blight.start); }
-    state.solo = { diceChoice: scenario.diceChoice !== false, territory: scenario.id, name: scenario.name, main: scenario.main, challenges: scenario.challenges, relics: scenario.relics, achievedRound: null, concludedRound: null };
+    state.solo = { diceChoice: scenario.diceChoice !== false, winterEvery: scenario.winterEvery || 0, region: scenario.region || 1, territory: scenario.id, name: scenario.name, main: scenario.main, challenges: scenario.challenges, relics: scenario.relics, achievedRound: null, concludedRound: null };
     const rest = shuffle(Object.keys(EVENTS).filter(e => !scenario.eventOrder.includes(e)), asFn(state.rng));
     state.eventDeck = [...scenario.eventOrder, ...rest];
   } else {

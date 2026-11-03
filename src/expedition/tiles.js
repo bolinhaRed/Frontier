@@ -29,6 +29,12 @@ export const KINDS = {
   river_bend2:    { w: 3,  base: 'plain',  path: 'river' },
   // Ponte: a estrada atravessa de NW para SE e o rio de NE para SW; cada um continua no seu grupo
   bridge:         { w: 3,  base: 'plain',  paths: { road: [3, 0], river: [1, 4] } },
+  // Locais especiais como peças (só usados nas Terras Desconhecidas; peso 0 na Expedição)
+  site_ruins:     { w: 0,  base: 'site',   art: 'ruins',     site: 'ruins' },
+  site_cave:      { w: 0,  base: 'site',   art: 'cave',      site: 'cave' },
+  site_crystals:  { w: 0,  base: 'site',   art: 'crystals',  site: 'crystals' },
+  site_stones:    { w: 0,  base: 'site',   art: 'stones',    site: 'stones' },
+  site_graveyard: { w: 0,  base: 'site',   art: 'graveyard', site: 'graveyard' },
   road_split:     { w: 4,  base: 'plain',  path: 'road', split: true },
   river_split:    { w: 4,  base: 'plain',  path: 'river', split: true },
 };
