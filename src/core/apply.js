@@ -16,6 +16,7 @@ import * as discard from './actions/discard.js';
 import { startTurn } from './state.js';
 import { checkPublicObjectives } from './rules/objectives.js';
 import { finalScoring } from './rules/scoring.js';
+import { startEvent, eventChooser, legalEventChoices, applyEventChoice, expireEffects } from './rules/events.js';
 
 // Por passo: que tipos de acção são aceites e como se aplicam.
 const STEPS = {
@@ -27,8 +28,11 @@ const STEPS = {
   stones: { reorderEvents: { legal: explore.legalReorder, apply: explore.applyReorder } },
   refill: { drawDeck: refill, buyMarket: refill },
   limit: { discard },
+  event: { eventChoice: { legal: legalEventChoices, apply: applyEventChoice } },
 };
-const stepOf = state => (state.phase === 'setup' ? 'setup' : state.phase === 'turn' ? state.step : null);
+const stepOf = state => (state.event ? 'event' : state.phase === 'setup' ? 'setup' : state.phase === 'turn' ? state.step : null);
+// Quem decide agora: quem escolhe no acontecimento, ou o jogador activo.
+export const currentPlayer = state => (state.event ? eventChooser(state) : state.active);
 
 export function legalActions(state) {
   const handlers = STEPS[stepOf(state)];
@@ -39,7 +43,7 @@ export function legalActions(state) {
 export function applyAction(state, action) {
   if (!action || typeof action.type !== 'string') return { ok: false, error: 'Acção inválida.' };
   if (state.phase === 'over') return { ok: false, error: 'A partida já terminou.' };
-  if (action.player !== state.active) return { ok: false, error: 'Não é a vez desse jogador.' };
+  if (action.player !== currentPlayer(state)) return { ok: false, error: 'Não é a vez desse jogador.' };
   const h = STEPS[stepOf(state)]?.[action.type];
   if (!h) return { ok: false, error: `A acção ${action.type} não é possível agora.` };
   const next = structuredClone(state);
@@ -52,6 +56,8 @@ export function applyAction(state, action) {
 
 function afterAction(state) {
   if (state.phase !== 'turn') return;
+  if (state.event) { checkPublicObjectives(state); return; }
+  if (state.afterEvent === 'nextRound') { state.afterEvent = null; checkPublicObjectives(state); nextRound(state); return; }
   if (state.step === 'refill') {
     const p = state.players[state.active];
     if (p.hand.length >= state.balance.handSize || refill.legal(state).length === 0) {
@@ -67,12 +73,23 @@ function endTurn(state) {
   const pos = state.order.indexOf(state.active);
   if (pos < state.order.length - 1) { startTurn(state, state.order[pos + 1]); return; }
   // Fim da ronda. A partida acaba na última ronda ou na ronda em que o baralho se esgotou.
+  expireEffects(state);
   if (state.round >= state.maxRounds || state.deckExhausted) {
     state.phase = 'over'; state.active = null; state.step = null; state.turn = null;
     state.final = finalScoring(state);
     return;
   }
-  // D1: no fim das rondas 4 e 8 haveria acontecimento; os efeitos só existem a partir da etapa 6.
+  // No fim de cada 4 rondas completas (excepto a última): acontecimento. Escolhe primeiro o 1.º jogador da ronda seguinte.
+  if (state.round % 4 === 0) {
+    state.step = 'event';
+    startEvent(state, state.order[0]);
+    checkPublicObjectives(state);
+    if (state.event) { state.afterEvent = 'nextRound'; return; }
+  }
+  nextRound(state);
+}
+
+function nextRound(state) {
   state.round++;
   startTurn(state, state.order[0]);
 }

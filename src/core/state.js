@@ -28,7 +28,7 @@ export function createGame({ seed = 'FRONTIER', mode = 'A', players }) {
       resources: { wood: 0, stone: 0, food: 0 }, hand: [], score: 0, points: {}, private: null })),
     cards: buildCards(N), deck: [], market: [], tokens: {}, bag: freshBag(), bagsOpened: 1, deckExhausted: false,
     board: {}, regions: [], built: {}, setup: null, turn: null,
-    publicObjectives: [], eventDeck: [], eventDiscard: [], final: null, log: [],
+    publicObjectives: [], eventDeck: [], eventDiscard: [], event: null, eventCount: 0, effects: [], final: null, log: [],
   };
   // 1. Ordem dos jogadores e baralho
   state.order = shuffle([...Array(N).keys()], asFn(state.rng));

@@ -3,6 +3,7 @@ import { STRUCTURES, STRUCTURE_ORDER } from '../data/structures.js';
 import { SITES } from '../data/sites.js';
 import { BALANCE } from '../data/balance.js';
 import { RESOURCE_NAMES } from '../data/terrains.js';
+import { EVENTS } from '../data/events.js';
 
 const cost = c => Object.entries(c).filter(([, n]) => n).map(([r, n]) => `${n} ${RESOURCE_NAMES[r]}`).join(' + ') || '—';
 const where = s => s.over ? 'sobre uma Aldeia tua' : s.on === 'any' ? `terreno teu numa região com ${s.minRegion}+` : s.on.map(t => ({ plain: 'Planície', forest: 'Floresta', hills: 'Colinas', mountains: 'Montanhas' }[t])).join(' ou ');
@@ -22,6 +23,7 @@ export function helpHTML() {
     return `<tr><td>${s.name}</td><td>${cost(s.cost)}</td><td>${where(s)}</td><td>${bonus(s)}</td><td>${s.points}</td></tr>`; }).join('')}</tbody></table><p class="hint">Uma estrutura por hexágono. O Castelo substitui a Aldeia (5 pontos no total).</p>`)}
   ${sec('Explorar (máximo 1 por turno)', `<p>Custa ${cost(B.exploreCost)}. Precisas de um terreno teu ao lado do local, que ainda ninguém explorou.</p><ul>${['ruins', 'cave', 'crystals', 'stones'].map(id => `<li><b>${SITES[id].name}</b> (${SITES[id].points} pts): ${{ ruins: '2 recursos à tua escolha', cave: '3 Pedra', crystals: 'só pontos', stones: 'vês e reordenas, em segredo, os 3 próximos acontecimentos' }[id]}.</li>`).join('')}</ul>`)}
   ${sec('Trocas, Expansão e mercado', `<p><b>Trocar com o banco</b>: ${B.tradeRate} recursos iguais por 1 de outro tipo (2 por 1 depois da Caravana).</p><p><b>Expansão</b> (1 por turno, só se colocaste): ${cost(B.expansionCost)} para colocar uma segunda carta.</p><p><b>Repor a mão</b>: do baralho é grátis; do mercado custa ${cost(B.marketCost)}.</p><p><b>Limite</b>: no fim do teu turno, se tiveres mais de ${B.resourceCap} recursos, devolves o excesso.</p>`)}
+  ${sec('Acontecimentos', `<p>No fim das rondas 4 e 8 revela-se uma carta. Cada jogador afectado escolhe, por ordem, a começar no 1.º jogador da ronda seguinte. Os efeitos de «não produzem» duram 2 rondas e os terrenos afectados ficam marcados no mapa. A Torre de vigia protege os teus terrenos vizinhos dos Perigos (Incêndio e Criaturas).</p><ul>${Object.values(EVENTS).map(e => `<li><b>${e.name}</b> (${e.kind}): ${e.text}</li>`).join('')}</ul>`)}
   ${sec('Objectivos', `<p><b>Públicos</b> (3 por partida): o primeiro a cumprir ganha ${B.publicPoints[0]}, o segundo ${B.publicPoints[1]}. <b>Privado</b>: ${B.privatePoints} pontos no fim se o cumprires; só tu o vês.</p>`)}
   ${sec('Fim e pontuação', `<p>A partida acaba no fim da última ronda (12 a 2, 10 a 3, 9 a 4) ou da ronda em que o baralho acabar. Somam-se: cada região com 3+ dá o seu tamanho a quem tem mais influência e metade ao segundo; objectivo privado; +2 por ficha 2 ou 12 e +1 por 3 ou 11 nos teus terrenos; 1 ponto por cada 3 recursos.</p><p class="hint">Desempate: mais estruturas, depois mais recursos, depois quem joga mais tarde.</p>`)}
   <div class="row-btns"><button class="btn primary" data-close-help>Fechar</button></div></div>`;

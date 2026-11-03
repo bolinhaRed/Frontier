@@ -8,12 +8,13 @@ export function produce(state, sum) {
   const out = [];
   for (const [k, c] of Object.entries(state.board)) {
     if (c.kind !== 'terrain' || c.owner == null || c.token !== sum || !TERRAINS[c.terrain]) continue;
-    if (c.blocked) continue;                                   // efeitos temporários (etapa 6)
+    if (c.blocks && Object.keys(c.blocks).length) continue;    // efeitos temporários dos acontecimentos
     const res = TERRAINS[c.terrain].resource, gain = { [res]: 1 };
     const bonus = c.structure ? STRUCTURES[c.structure].bonus : null;
     if (bonus?.same) gain[res] += bonus.same;
     if (bonus?.food) gain.food = (gain.food || 0) + bonus.food;
     const p = state.players[c.owner];
+    for (const e of state.effects || []) if (e.type === 'bonus' && e.pid === c.owner && TERRAINS[c.terrain].family === e.family) gain[e.res] = (gain[e.res] || 0) + e.n;
     for (const [r, n] of Object.entries(gain)) p.resources[r] += n;
     out.push({ hex: k, owner: c.owner, gain });
   }

@@ -137,3 +137,12 @@ label.btn { cursor: pointer; }
   100% { transform: translateX(46px) rotate(7deg); }
 }
 @media (max-width: 600px) { .die { width: 52px; height: 52px; padding: 7px; } .dice-sum { font-size: 28px; transform: translateY(58px); } }
+
+/* ---- etapa 5: acontecimentos ---- */
+.event { display: flex; gap: 12px; align-items: flex-start; width: 100%; }
+.event .art { flex: none; display: block; }
+.event .art.fire { filter: sepia(1) saturate(3.2) hue-rotate(-18deg) brightness(1.05); }   /* Incêndio: arte em tom laranja */
+.event p { margin: 4px 0; font-size: 14px; }
+.event small { color: var(--ink-3); }
+@media (max-width: 600px) { .event .art { transform: scale(.7); transform-origin: top left; margin: 0 -30px -40px 0; } }
+.panel.in-event .row { display: none; }

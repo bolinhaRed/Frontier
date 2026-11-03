@@ -1,7 +1,7 @@
 // FRONTIER — carregamento dos atlas de tiles e níveis de detalhe (mipmaps).
 // Reutilizado do projecto original (assets.js), com os caminhos da nova estrutura.
 const TILES = './assets/tiles/';
-let meta = null;
+let meta = null, art = null;
 const atlases = {};   // nome → [nível0 (img), nível1 (½), nível2 (¼), nível3 (⅛)]
 const index = {};     // nome do tile → posição no atlas
 
@@ -14,6 +14,7 @@ export async function loadAtlases(onProgress = () => {}) {
   if (!r.ok) throw new Error('Não foi possível carregar ' + TILES + 'atlas.json');
   meta = await r.json();
   meta.order.forEach((n, i) => { index[n] = i; });
+  try { art = await (await fetch('./assets/art/art.json')).json(); } catch { art = null; }
   let done = 0;
   await Promise.all(meta.atlases.map(async n => {
     atlases[n] = [await loadImage(TILES + n + '.webp')];
@@ -49,4 +50,15 @@ export function tileStyle(atlasName, tile, displayW) {
   const col = i % t.cols, row = Math.floor(i / t.cols), s = displayW / t.w;
   const sheetW = t.cols * t.cw, sheetH = Math.ceil(meta.order.length / t.cols) * t.ch;
   return `background:url(${TILES + atlasName}.webp) ${-(col * t.cw + t.pad) * s}px ${-(row * t.ch + t.pad) * s}px / ${sheetW * s}px ${sheetH * s}px no-repeat;width:${displayW}px;height:${Math.round(t.h * s)}px`;
+}
+
+// Ilustração de topo pontiagudo (folhas em assets/art/), para as cartas de acontecimento.
+export function artStyle(name, displayW) {
+  if (!art || !name) return '';
+  const [pack, , ...rest] = name.split('_'); const n = rest.join('_');
+  const P = art.packs[pack]; if (!P) return '';
+  const i = P.names.indexOf(n); if (i < 0) return '';
+  const c = art.cell, s = displayW / c.w, cw = c.w + c.pad * 2, ch = c.h + c.pad * 2;
+  const rows = Math.ceil(P.names.length / P.cols);
+  return `background:url(./assets/art/${pack}.webp) ${-((i % P.cols) * cw + c.pad) * s}px ${-(Math.floor(i / P.cols) * ch + c.pad) * s}px / ${P.cols * cw * s}px ${rows * ch * s}px no-repeat;width:${displayW}px;height:${Math.round(c.h * s)}px`;
 }

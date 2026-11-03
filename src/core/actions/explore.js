@@ -4,7 +4,7 @@
 // (ou as que houver) e devolve-as pela ordem que quiser (acção reorderEvents). D2.
 import { SITES } from '../../data/sites.js';
 import { RESOURCES } from '../../data/terrains.js';
-import { exploreError } from '../rules/sites.js';
+import { exploreError, exploreCost } from '../rules/sites.js';
 import { award, pay } from '../points.js';
 
 const PAIRS = RESOURCES.flatMap((a, i) => RESOURCES.slice(i).map(b => [a, b]));
@@ -29,7 +29,7 @@ export function apply(state, a) {
     if (!Array.isArray(a.take) || a.take.length !== site.reward.choose || !a.take.every(r => RESOURCES.includes(r)))
       return 'Nas Ruínas escolhe 2 recursos.';
   }
-  pay(p, state.balance.exploreCost);
+  pay(p, exploreCost(state, state.active, k));
   c.explored = state.active;
   state.turn.explored = true;
   award(state, state.active, 'sites', site.points);

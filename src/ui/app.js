@@ -1,12 +1,12 @@
 // FRONTIER — interface de jogo (etapa 3): Free Frontier no PC e no telemóvel, vários jogadores no mesmo
 // aparelho, com ecrã de passagem entre jogadores (protege mão e objectivo privado) e gravação automática.
 // Sem acontecimentos activos (etapa 6).
-import { loadAtlases, tileStyle } from './assets.js';
+import { loadAtlases, tileStyle, artStyle } from './assets.js';
 import { MapView } from './map-view.js';
 import { sound } from './audio.js';
 import { randomSeed } from './seed.js';
 import { $, esc } from './dom.js';
-import { createGame, applyAction, legalActions } from '../core/index.js';
+import { createGame, applyAction, legalActions, currentPlayer } from '../core/index.js';
 import { emptyFrontier, parseKey } from '../core/rules/placement-a.js';
 import { TERRAINS, BIOME_NAMES, RESOURCE_NAMES, RESOURCES } from '../data/terrains.js';
 import { SITES } from '../data/sites.js';
@@ -21,13 +21,14 @@ import { helpHTML } from './help.js';
 const COLORS = ['#a8321f', '#2c6a97', '#4f6b33', '#c8922e'];
 const RES = r => RESOURCE_NAMES[r];
 let state = null, view = null, chosen = null, picked = null, discard = null;
-let revealed = null, showPriv = false, lastMsg = '';      // revealed = jogador que já recebeu o aparelho
+let revealed = null, showPriv = false, lastMsg = '', lastShown = '';      // revealed = jogador que já recebeu o aparelho
 const store = (() => { try { return window.localStorage; } catch { return null; } })();
 let currentId = null, busy = false;
 const persist = () => { if (store && currentId) writeSave(store, currentId, state); };
 const STEP_NAMES = ['Dados', 'Colocar', 'Acções', 'Repor'];
 const STEP_INDEX = { roll: 0, caravan: 0, place: 1, actions: 2, stones: 2, refill: 3, limit: 3 };
-const needsCover = () => state && state.phase !== 'over' && state.active != null && revealed !== state.active;
+const who = () => currentPlayer(state);   // quem decide agora (no acontecimento, quem escolhe)
+const needsCover = () => state && state.phase !== 'over' && who() != null && revealed !== who();
 
 function newGame(names) {
   state = createGame({ seed: randomSeed(), players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i] })) });
@@ -117,8 +118,10 @@ function boardView() {
     const mark = picked === k ? '#c8922e' : null;
     if (c.kind === 'site') cells.push({ q, r, atlas: 'greenlands', tile: SITES[c.site].tile, flag: c.explored != null ? state.players[c.explored].color : null, mark });
     else if (c.kind === 'lake') cells.push({ q, r, atlas: c.biome, tile: 'lake', mark });
+    else if (c.kind === 'deadtrees' || c.kind === 'volcano') cells.push({ q, r, atlas: c.biome, tile: c.kind === 'volcano' ? 'vulcano' : 'deadtrees', color: c.owner != null ? state.players[c.owner].color : null, token: c.token, mark });
     else cells.push({ q, r, atlas: c.biome, tile: c.structure ? STRUCTURES[c.structure].tile : TERRAINS[c.terrain].tile,
-      rot: c.structure ? 0 : (c.rot || 0) * Math.PI / 3, color: c.owner != null ? state.players[c.owner].color : null, token: c.token, mark });
+      rot: c.structure ? 0 : (c.rot || 0) * Math.PI / 3, color: c.owner != null ? state.players[c.owner].color : null, token: c.token,
+      mark: mark || (c.blocks && Object.keys(c.blocks).length ? '#5d5a55' : null) });
   }
   const R = Math.max(4, ...[...used].map(k => { const [q, r] = parseKey(k); return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2 + 2; }));
   const slots = [];
@@ -157,10 +160,10 @@ function finalHTML() {
   const rows = f.ranking.map((pid, i) => { const r = f.rows[pid], p = s.players[pid], pt = p.points;
     return `<tr${i === 0 ? ' class="win"' : ''}><td>${i + 1}.º</td><td><i style="background:${p.color}"></i>${esc(p.name)}</td>
       <td>${pt.milestones || 0}</td><td>${pt.structures || 0}</td><td>${pt.sites || 0}</td><td>${pt.objectives || 0}</td>
-      <td>${r.regions}</td><td>${r.private}</td><td>${r.hardLand}</td><td>${r.leftovers}</td><td><b>${r.total}</b></td></tr>`; }).join('');
+      <td>${r.regions}</td><td>${r.private}</td><td>${r.hardLand}</td><td>${r.leftovers}</td><td>${r.volcano}</td><td>${pt.events || 0}</td><td><b>${r.total}</b></td></tr>`; }).join('');
   return `<p class="head">Fim da partida · venceu ${esc(s.players[f.winner].name)}</p>
     <div class="scroll"><table class="score"><thead><tr><th></th><th>Jogador</th><th>Marcos</th><th>Estruturas</th><th>Locais</th><th>Objectivos</th>
-    <th>Regiões</th><th>Privado</th><th>Terra difícil</th><th>Sobras</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <th>Regiões</th><th>Privado</th><th>Terra difícil</th><th>Sobras</th><th>Vulcão</th><th>Acont.</th><th>Total</th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="hint">Objectivos privados: ${f.ranking.map(pid => { const p = s.players[pid];
       return `${esc(p.name)} — ${esc(PRIVATE_OBJECTIVES[p.private].name)} ${f.rows[pid].private ? '(cumprido)' : '(não cumprido)'}`; }).join(' · ')}</p>
     <p class="hint">Desempate: mais estruturas, depois mais recursos, depois quem joga mais tarde.</p>
@@ -177,9 +180,33 @@ function hexOptions(k) {
     : btn(`Explorar ${SITES[state.board[k].site].name} (2 Provisões${a.take ? ', recebe ' + a.take.map(RES).join(' + ') : ''})`, a)).join('');
 }
 
+// Etiqueta de cada opção de acontecimento.
+function optionLabel(id, a) {
+  const R = r => RES(r);
+  const L = {
+    wildfire: { A: 'Pagar 2 Provisões', B: 'Deixar arder (+2 Madeira)' },
+    creatures: { A: 'Pagar 1 Pedra', B: 'Não pagar (não produzem 2 rondas)' },
+    storm: { A: 'Pagar 1 Madeira', B: 'Não pagar (não produzem 2 rondas)' },
+    ruins: { A: '+1 Provisão', B: 'Explorar estas Ruínas por 1 Provisão' },
+    vein: { A: '+2 Pedra', B: '+1 Pedra por Serra que produza (2 rondas)' },
+    volcano: { A: '+3 Pedra', B: '+1 ponto no fim por vizinho ocupado' },
+  };
+  if (id === 'winter') return `Pagar ${a.amount} Provisões`;
+  if (id === 'fog') return a.option === 'B' ? '+1 Provisão' : `Trocar ${TERRAINS[state.cards[a.card].terrain].name} (${state.tokens[a.card]}) pela carta do topo`;
+  if (id === 'merchants') return a.option === 'A' ? `+1 ${R(a.resource)}` : `Trocar 2 ${R(a.give)} por 1 ${R(a.get)}`;
+  if (id === 'harvest') return { plain: 'Planície', forest: 'Floresta e Bosque', range: 'Serra', water: 'Águas' }[a.family];
+  return L[id]?.[a.option] || a.option;
+}
+function eventDetail(ev, pid) {
+  const t = ev.targets[pid]; if (!t) return '';
+  if (ev.id === 'winter') return `<p class="hint">Custo para ti: ${t.cost} Provisões.</p>`;
+  if (t.hexes) return `<p class="hint">Terrenos afectados: ${t.hexes.length} (marcados no mapa).</p>`;
+  return '';
+}
+
 function coverHTML() {
-  const p = state.players[state.active];
-  const where = state.phase === 'setup' ? 'Preparação' : `Ronda ${state.round} de ${state.maxRounds}`;
+  const p = state.players[who()];
+  const where = state.event ? `Acontecimento: ${EVENTS[state.event.id].name}` : state.phase === 'setup' ? 'Preparação' : `Ronda ${state.round} de ${state.maxRounds}`;
   return `<div class="cover-box"><i class="dot" style="background:${p.color}"></i><p class="hint">${where}</p><h2>Vez de ${esc(p.name)}</h2>
     <p>Passa o aparelho a ${esc(p.name)}. A mão e o objectivo privado só aparecem depois de tocar no botão.</p>
     ${lastMsg ? `<p class="last">Última jogada: ${esc(lastMsg)}</p>` : ''}
@@ -203,7 +230,14 @@ function render() {
   const s = state, p = s.players[s.active];
   let head = '', tools = '', handBtns = 'disabled';
   const diceTxt = s.turn?.dice ? ` · dados ${s.turn.dice[0]} + ${s.turn.dice[1]} = ${s.turn.dice[0] + s.turn.dice[1]}` : '';
-  if (s.phase === 'setup') {
+  if (s.event) {
+    const ev = s.event, card = EVENTS[ev.id], ch = s.players[who()];
+    head = `Acontecimento · ${esc(card.name)} · escolhe ${esc(ch.name)}`;
+    tools = covered ? '' : `<div class="event"><span class="art${ev.id === 'wildfire' ? ' fire' : ''}" style="${ev.id === 'fog' ? tileStyle('greenlands', 'fog', 110) : artStyle(card.art, 110)}"></span>
+      <div><b>${esc(card.name)}</b> <small>${esc(card.kind)}</small><p>${esc(card.text)}</p>${eventDetail(ev, who())}
+      <div class="opts">${legalActions(s).map(a => btn(optionLabel(ev.id, a), a)).join('')}</div></div></div>`;
+    $('#hand').innerHTML = covered ? '' : p ? (s.players[who()].hand.map(id => cardHTML(id, 'disabled')).join('')) : '';
+  } else if (s.phase === 'setup') {
     head = `Preparação · ${esc(p.name)} coloca a carta que tirou`;
     $('#hand').innerHTML = covered ? '' : cardHTML(s.setup.card, 'disabled');
     tools = '<span class="hint">Toca num hexágono marcado.</span>';
@@ -240,10 +274,12 @@ function render() {
   } else {
     $('#hand').innerHTML = '';
   }
+  if (s.lastEvent && !s.event && lastShown !== s.lastEvent.id + s.lastEvent.round) { lastShown = s.lastEvent.id + s.lastEvent.round; lastMsg = `Acontecimento: ${EVENTS[s.lastEvent.id].name}.`; $('#msg').textContent = lastMsg; }
   $('#head').innerHTML = head;
   $('#tools').innerHTML = s.phase === 'over' ? finalHTML() : tools;
   $('#market').innerHTML = s.market.map(id => cardHTML(id, s.phase === 'turn' && s.step === 'refill' && p.resources.food >= 1 ? 'data-buy="1"' : 'disabled')).join('');
   $('.panel').classList.toggle('over', s.phase === 'over');
+  $('.panel').classList.toggle('in-event', !!s.event);
 }
 
 function onHex(h) {
@@ -284,7 +320,7 @@ function bind() {
     if (b.dataset.card) { chosen = chosen === b.dataset.card ? null : b.dataset.card; picked = null; render(); return; }
     if (b.dataset.dis) { discard[b.dataset.dis]++; render(); return; }
     if (b.dataset.undis) { discard[b.dataset.undis]--; render(); return; }
-    if (b.dataset.reveal != null) { revealed = state.active; showPriv = false; render(); return; }
+    if (b.dataset.reveal != null) { revealed = who(); showPriv = false; render(); return; }
     if (b.dataset.priv != null) { showPriv = !showPriv; render(); return; }
     if (b.dataset.side != null) { $('#side').classList.toggle('open'); return; }
     if (b.dataset.openNew != null) { draftNames = state ? state.players.map(p => p.name) : draftNames; openNewGame(); return; }
