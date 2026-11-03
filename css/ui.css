@@ -146,3 +146,4 @@ label.btn { cursor: pointer; }
 .event small { color: var(--ink-3); }
 @media (max-width: 600px) { .event .art { transform: scale(.7); transform-origin: top left; margin: 0 -30px -40px 0; } }
 .panel.in-event .row { display: none; }
+.ok { color: var(--moss); font-weight: 700; } .stars { color: #b07d1e; letter-spacing: 2px; }

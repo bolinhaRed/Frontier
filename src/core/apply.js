@@ -17,6 +17,7 @@ import { startTurn } from './state.js';
 import { checkPublicObjectives } from './rules/objectives.js';
 import { finalScoring } from './rules/scoring.js';
 import { startEvent, eventChooser, legalEventChoices, applyEventChoice, expireEffects } from './rules/events.js';
+import { checkSolo, soloResult } from './rules/solo.js';
 
 // Por passo: que tipos de acção são aceites e como se aplicam.
 const STEPS = {
@@ -24,7 +25,7 @@ const STEPS = {
   roll: { roll },
   caravan: { caravan },
   place: { place, skipPlace: place },
-  actions: { build, expand, explore, trade, endActions },
+  actions: { build, expand, explore, trade, endActions, concludeSolo: endActions },
   stones: { reorderEvents: { legal: explore.legalReorder, apply: explore.applyReorder } },
   refill: { drawDeck: refill, buyMarket: refill },
   limit: { discard },
@@ -56,6 +57,8 @@ export function applyAction(state, action) {
 
 function afterAction(state) {
   if (state.phase !== 'turn') return;
+  checkSolo(state);
+  if (state.step === 'conclude') { endGame(state); return; }
   if (state.event) { checkPublicObjectives(state); return; }
   if (state.afterEvent === 'nextRound') { state.afterEvent = null; checkPublicObjectives(state); nextRound(state); return; }
   if (state.step === 'refill') {
@@ -74,19 +77,22 @@ function endTurn(state) {
   if (pos < state.order.length - 1) { startTurn(state, state.order[pos + 1]); return; }
   // Fim da ronda. A partida acaba na última ronda ou na ronda em que o baralho se esgotou.
   expireEffects(state);
-  if (state.round >= state.maxRounds || state.deckExhausted) {
-    state.phase = 'over'; state.active = null; state.step = null; state.turn = null;
-    state.final = finalScoring(state);
-    return;
-  }
+  if (state.round >= state.maxRounds || state.deckExhausted) { endGame(state); return; }
   // No fim de cada 4 rondas completas (excepto a última): acontecimento. Escolhe primeiro o 1.º jogador da ronda seguinte.
-  if (state.round % 4 === 0) {
+  if (state.events !== false && state.round % 4 === 0) {
     state.step = 'event';
     startEvent(state, state.order[0]);
     checkPublicObjectives(state);
     if (state.event) { state.afterEvent = 'nextRound'; return; }
   }
   nextRound(state);
+}
+
+function endGame(state) {
+  checkSolo(state);
+  state.phase = 'over'; state.active = null; state.step = null; state.turn = null;
+  state.final = finalScoring(state);
+  if (state.solo) state.final.solo = soloResult(state);
 }
 
 function nextRound(state) {

@@ -3,13 +3,13 @@ import { RESOURCES } from '../../data/terrains.js';
 
 export const legal = state => [
   ...RESOURCES.map(resource => ({ type: 'caravan', player: state.active, option: 'resource', resource })),
-  { type: 'caravan', player: state.active, option: 'trade' },
+  ...(state.balance.caravanTrade === false ? [] : [{ type: 'caravan', player: state.active, option: 'trade' }]),
 ];
 export function apply(state, a) {
   if (a.option === 'resource') {
     if (!RESOURCES.includes(a.resource)) return 'Recurso desconhecido.';
     state.players[state.active].resources[a.resource] += 1;
-  } else if (a.option !== 'trade') return 'Opção da Caravana desconhecida.';
+  } else if (a.option !== 'trade' || state.balance.caravanTrade === false) return 'Opção da Caravana desconhecida.';
   state.turn.caravan = a.option;
   state.step = 'place';
 }

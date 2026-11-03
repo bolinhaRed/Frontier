@@ -17,26 +17,31 @@ import { ring } from '../core/hex.js';
 import { writeSave, listSaves, readSave, deleteSave, exportSave, importSave, newSaveId } from '../storage/saves.js';
 import { showDice, hideDice } from './dice.js';
 import { helpHTML } from './help.js';
+import { worldBoard, worldSideHTML, territoryHTML, territoryAt } from './world.js';
+import { loadCampaign, saveCampaign, recordResult, takeRelic, toggleRelic, borderFor, territory } from '../storage/campaign.js';
+import { buildScenario } from '../core/scenario.js';
+import { RELICS, CHALLENGE_TEXT } from '../data/territories.js';
+import { CHALLENGE_CHECKS } from '../core/rules/solo.js';
 
 const COLORS = ['#a8321f', '#2c6a97', '#4f6b33', '#c8922e'];
 const RES = r => RESOURCE_NAMES[r];
 let state = null, view = null, chosen = null, picked = null, discard = null;
 let revealed = null, showPriv = false, lastMsg = '', lastShown = '';      // revealed = jogador que já recebeu o aparelho
 const store = (() => { try { return window.localStorage; } catch { return null; } })();
-let currentId = null, busy = false;
+let currentId = null, busy = false, mode = 'game', camp = null, selT = null;
 const persist = () => { if (store && currentId) writeSave(store, currentId, state); };
 const STEP_NAMES = ['Dados', 'Colocar', 'Acções', 'Repor'];
 const STEP_INDEX = { roll: 0, caravan: 0, place: 1, actions: 2, stones: 2, refill: 3, limit: 3 };
 const who = () => currentPlayer(state);   // quem decide agora (no acontecimento, quem escolhe)
-const needsCover = () => state && state.phase !== 'over' && who() != null && revealed !== who();
+const needsCover = () => mode === 'game' && state && state.players.length > 1 && state.phase !== 'over' && who() != null && revealed !== who();
 
 function newGame(names) {
   state = createGame({ seed: randomSeed(), players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i] })) });
-  chosen = picked = discard = null; revealed = null; lastMsg = ''; currentId = newSaveId(); hideDice();
+  chosen = picked = discard = null; revealed = null; lastMsg = ''; currentId = newSaveId(); hideDice(); mode = 'game';
   $('#dialog').hidden = true; persist(); render(); fit();
 }
 function resume(saved) {
-  state = saved.state; currentId = saved.id; hideDice(); chosen = picked = discard = null; revealed = null; lastMsg = '';
+  state = saved.state; currentId = saved.id; hideDice(); mode = 'game'; chosen = picked = discard = null; revealed = state.players.length === 1 ? 0 : null; lastMsg = '';
   $('#dialog').hidden = true; render(); fit();
 }
 function fit() {
@@ -60,7 +65,8 @@ function openMenu(note = '') {
   const saves = store ? listSaves(store) : [];
   const when = iso => new Date(iso).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
   d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2>
-    <div class="row-btns"><button class="btn primary" data-open-new>Nova partida</button><button class="btn" data-help>Como jogar</button>${state ? '<button class="btn" data-cancel>Voltar ao jogo</button>' : ''}</div>
+    <div class="row-btns"><button class="btn primary" data-world>Campanha Solo</button><button class="btn" data-open-new>Partida de 2 a 4 jogadores</button></div>
+    <div class="row-btns"><button class="btn small" data-help>Como jogar</button>${state && mode === 'game' ? '<button class="btn small" data-cancel>Voltar ao jogo</button>' : ''}</div>
     ${note ? `<p class="warn">${esc(note)}</p>` : ''}
     <h3>Partidas guardadas</h3>
     ${saves.length ? `<ul class="saves">${saves.map(g => `<li${g.id === currentId ? ' class="cur"' : ''}><div><b>${g.players.map(esc).join(', ')}</b><small>${esc(g.where)} · ${esc(when(g.savedAt))}</small></div>
@@ -156,6 +162,7 @@ function sideHTML() {
 }
 
 function finalHTML() {
+  if (state.solo) return soloFinalHTML();
   const f = state.final, s = state;
   const rows = f.ranking.map((pid, i) => { const r = f.rows[pid], p = s.players[pid], pt = p.points;
     return `<tr${i === 0 ? ' class="win"' : ''}><td>${i + 1}.º</td><td><i style="background:${p.color}"></i>${esc(p.name)}</td>
@@ -204,6 +211,54 @@ function eventDetail(ev, pid) {
   return '';
 }
 
+// ---------- Campanha Solo ----------
+function openWorld() {
+  camp = store ? loadCampaign(store) : loadCampaign({ getItem: () => null });
+  mode = 'world'; $('#dialog').hidden = true; hideDice();
+  if (selT == null) selT = 1;
+  renderWorld(); view.fitAll(80, innerHeight - $('.panel').getBoundingClientRect().top);
+}
+function renderWorld() {
+  $('#cover').hidden = true;
+  view.setBoard(worldBoard(camp, selT, COLORS[0]));
+  $('#side').innerHTML = worldSideHTML(camp, esc);
+  $('#steps').innerHTML = '<span class="on">Mundo</span>';
+  const t = selT ? territory(selT) : null;
+  $('#head').innerHTML = t ? esc(t.name) : 'Campanha Solo';
+  $('#tools').innerHTML = territoryHTML(camp, t, esc, artStyle);
+  $('#hand').innerHTML = ''; $('#market').innerHTML = ''; $('#msg').textContent = '';
+  $('.panel').classList.add('in-event'); $('.panel').classList.remove('over');
+}
+function startSolo(id) {
+  const t = territory(id);
+  const scenario = buildScenario(t, camp.relics.equipped, borderFor(camp, t));
+  state = createGame({ seed: randomSeed(), players: [{ name: 'Tu', color: COLORS[0] }], scenario });
+  chosen = picked = discard = null; revealed = 0; lastMsg = ''; currentId = newSaveId(); mode = 'game';
+  persist(); render(); fit();
+}
+function soloSideHTML() {
+  const s = state, so = s.solo, p = s.players[0];
+  const done = so.achievedRound != null;
+  return `<ol class="players"><li class="act"><i style="background:${p.color}"></i><b>${esc(so.name)}</b> <span class="pts">${p.score} pts</span>
+    <span class="chips">${RESOURCES.map(r => `<span class="chip r-${r}" title="${RES(r)}">${RES(r)} <b>${p.resources[r]}</b></span>`).join('')}</span></li></ol>
+    <h2>Objectivo do território</h2><p class="${done ? 'ok' : ''}">${done ? '✔ ' : ''}${esc(so.main.text)}</p>
+    <h2>Desafios (+1 estrela cada)</h2><ul class="objs">${so.challenges.map(c => `<li>${esc(CHALLENGE_TEXT[c.id](c))}</li>`).join('')}</ul>
+    ${so.relics.length ? `<h2>Relíquias</h2><ul class="objs">${so.relics.map(id => `<li><b>${esc(RELICS[id].name)}</b>: ${esc(RELICS[id].text)}</li>`).join('')}</ul>` : ''}`;
+}
+function soloFinalHTML() {
+  const res = state.final.solo, so = state.solo;
+  if (camp == null) camp = loadCampaign(store);
+  camp.recorded = camp.recorded || [];
+  if (!camp.recorded.includes(currentId)) { recordResult(camp, state); camp.recorded.push(currentId); saveCampaign(store, camp); }
+  const st = '★'.repeat(res.stars) + '☆'.repeat(3 - res.stars);
+  const offer = res.won && camp.offer ? `<p><b>Escolhe uma relíquia:</b></p><div class="opts">${camp.offer.map(id => `<button class="btn small" data-relic="${id}">${esc(RELICS[id].name)} — ${esc(RELICS[id].text)}</button>`).join('')}</div>` : '';
+  return `<p class="head">${esc(so.name)} · ${res.won ? 'território conquistado' : 'objectivo não cumprido'} <span class="stars">${st}</span></p>
+    <ul class="objs"><li>${res.won ? '✔' : '✘'} ${esc(so.main.text)}</li>${so.challenges.map((c, i) => `<li>${res.challenges[i] ? '✔' : '✘'} ${esc(CHALLENGE_TEXT[c.id](c))}</li>`).join('')}</ul>
+    <p class="hint">${state.final.rows[0].total} pontos.${res.won ? ' O território fica no mapa do mundo tal como o deixaste.' : ' Podes tentar de novo: o território muda a cada tentativa.'}</p>
+    ${offer}
+    <div class="row-btns"><button class="btn primary" data-world>Voltar ao mundo</button><button class="btn" data-go="${so.territory}">Tentar de novo</button></div>`;
+}
+
 function coverHTML() {
   const p = state.players[who()];
   const where = state.event ? `Acontecimento: ${EVENTS[state.event.id].name}` : state.phase === 'setup' ? 'Preparação' : `Ronda ${state.round} de ${state.maxRounds}`;
@@ -221,12 +276,14 @@ function stepsHTML() {
 }
 
 function render() {
+  if (mode === 'world') return renderWorld();
   const covered = needsCover();
   $('#cover').hidden = !covered;
   if (covered) $('#cover').innerHTML = coverHTML();
   view.setBoard(boardView());
-  $('#side').innerHTML = sideHTML();
+  $('#side').innerHTML = state.solo ? soloSideHTML() : sideHTML();
   $('#steps').innerHTML = stepsHTML();
+  $('.panel').classList.remove('in-event');
   const s = state, p = s.players[s.active];
   let head = '', tools = '', handBtns = 'disabled';
   const diceTxt = s.turn?.dice ? ` · dados ${s.turn.dice[0]} + ${s.turn.dice[1]} = ${s.turn.dice[0] + s.turn.dice[1]}` : '';
@@ -254,6 +311,7 @@ function render() {
       tools = `<span class="hint">Construções ${s.turn.builds}/2 · toca num terreno teu para construir ou num local para explorar${handBtns ? '' : ' · escolhe uma carta para a Expansão (2 Madeira + 2 Provisões)'}.</span>`
         + (picked ? `<div class="opts">${hexOptions(picked)}</div>` : '')
         + (trades.length ? `<div class="opts"><span class="hint">Trocar ${rate} por 1:</span>${trades.map(a => btn(`${RES(a.give)} → ${RES(a.get)}`, a)).join('')}</div>` : '')
+        + (L.some(a => a.type === 'concludeSolo') ? btn('Concluir território agora', { type: 'concludeSolo', player: s.active }) : '')
         + btn('Terminar acções e repor a mão', { type: 'endActions', player: s.active }, 'primary');
     }
     if (s.step === 'stones') {
@@ -279,11 +337,13 @@ function render() {
   $('#tools').innerHTML = s.phase === 'over' ? finalHTML() : tools;
   $('#market').innerHTML = s.market.map(id => cardHTML(id, s.phase === 'turn' && s.step === 'refill' && p.resources.food >= 1 ? 'data-buy="1"' : 'disabled')).join('');
   $('.panel').classList.toggle('over', s.phase === 'over');
+  if (s.phase === 'over') hideDice();
   $('.panel').classList.toggle('in-event', !!s.event);
 }
 
 function onHex(h) {
   if (!h) return;
+  if (mode === 'world') { const t = territoryAt(h.q, h.r); selT = t ? t.id : null; renderWorld(); return; }
   const s = state, k = h.q + ',' + h.r;
   if (s.phase === 'setup') return act({ type: 'setupPlace', player: s.active, q: h.q, r: h.r, rot: 0 });
   if (s.phase !== 'turn') return;
@@ -304,6 +364,10 @@ function bind() {
     sound.unlock();
     const b = e.target.closest('button'); if (!b || b.disabled || busy) return;
     if (b.dataset.menu != null) return openMenu();
+    if (b.dataset.world != null) return openWorld();
+    if (b.dataset.go) return startSolo(+b.dataset.go);
+    if (b.dataset.equip) { toggleRelic(camp, b.dataset.equip); saveCampaign(store, camp); renderWorld(); return; }
+    if (b.dataset.relic) { takeRelic(camp, b.dataset.relic); saveCampaign(store, camp); render(); return; }
     if (b.dataset.help != null) { $('#help').innerHTML = helpHTML(); $('#help').hidden = false; return; }
     if (b.dataset.closeHelp != null) { $('#help').hidden = true; return; }
     if (b.dataset.load) { const g = readSave(store, b.dataset.load); return g ? resume(g) : openMenu('Não foi possível abrir essa gravação.'); }
@@ -348,7 +412,7 @@ async function start() {
   catch (e) { $('#head').textContent = e.message + '. Abre o jogo através de um servidor local (ver README).'; return; }
   view = new MapView($('#map'), { onSelect: onHex });
   bind();
-  if (store && listSaves(store).length) openMenu(); else openNewGame();
+  openMenu();       // menu principal: Campanha Solo, partida de 2 a 4, partidas guardadas
   if (location.hash === '#debug') window.FRONTIER = { get state() { return state; }, set state(v) { state = v; render(); }, view, act };
 }
 start();

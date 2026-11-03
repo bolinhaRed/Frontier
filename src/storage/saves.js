@@ -13,7 +13,7 @@ const writeIndex = (store, list) => store.setItem(INDEX, JSON.stringify(list));
 
 function summary(id, state, savedAt) {
   const where = state.phase === 'setup' ? 'Preparação' : state.phase === 'over' ? 'Terminada' : `Ronda ${state.round} de ${state.maxRounds}`;
-  return { id, savedAt, players: state.players.map(p => p.name), where, over: state.phase === 'over' };
+  return { id, savedAt, players: state.solo ? ['Solo · ' + state.solo.name] : state.players.map(p => p.name), where, over: state.phase === 'over', solo: state.solo?.territory ?? null };
 }
 
 // Converte gravações de versões anteriores para a actual. Só existe a versão 1.
@@ -25,7 +25,7 @@ export function migrate(data) {
 
 export function validState(s) {
   return !!s && typeof s === 'object' && ['setup', 'turn', 'over'].includes(s.phase)
-    && Array.isArray(s.players) && s.players.length >= 2 && s.players.length <= 4
+    && Array.isArray(s.players) && s.players.length >= 1 && s.players.length <= 4
     && s.board && typeof s.board === 'object' && s.rng && Number.isInteger(s.rng.s)
     && Array.isArray(s.deck) && Array.isArray(s.order) && Array.isArray(s.log);
 }

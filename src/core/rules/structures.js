@@ -3,6 +3,9 @@ import { STRUCTURES } from '../../data/structures.js';
 import { regionAt } from './regions.js';
 import { canPay } from '../points.js';
 
+// Custo de uma estrutura (as relíquias do Solo podem mudá-lo em balance.costs).
+export const structureCost = (state, id) => state.balance.costs?.[id] || STRUCTURES[id].cost;
+
 export function buildError(state, pid, structure, k) {
   const s = STRUCTURES[structure]; if (!s) return 'Estrutura desconhecida.';
   const c = state.board[k];
@@ -16,7 +19,7 @@ export function buildError(state, pid, structure, k) {
   }
   if (s.onePerGame && state.built?.[structure]) return `Só há uma ${s.name} por partida.`;
   if (s.minRegion) { const rg = regionAt(state, k); if (!rg || rg.hexes.length < s.minRegion) return `${s.name} precisa de uma região com ${s.minRegion} ou mais terrenos.`; }
-  if (!canPay(state.players[pid], s.cost)) return 'Não tens recursos para essa construção.';
+  if (!canPay(state.players[pid], structureCost(state, structure))) return 'Não tens recursos para essa construção.';
   return null;
 }
 

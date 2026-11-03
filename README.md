@@ -4,9 +4,9 @@ Jogo de estratégia com terrenos hexagonais, inspirado em Carcassonne, Catan e n
 2 a 4 jogadores, humanos ou IA, no mesmo dispositivo. PWA em HTML, CSS e JavaScript, exclusivamente
 local: sem servidor, sem contas e sem rede durante a partida.
 
-**Estado: etapa 5.** Free Frontier completo para 2 a 4 jogadores no mesmo PC ou telemóvel, com os
-10 acontecimentos (fim das rondas 4 e 8), ecrã de passagem do aparelho, dados animados, «Como jogar»,
-gravação automática de várias partidas e exportar ou importar (Menu). Próxima etapa: campanha Solo.
+**Estado: etapa 6.** Campanha Solo (mapa do mundo, territórios 1 a 6, estrelas, relíquias) e Free
+Frontier para 2 a 4 jogadores no mesmo PC ou telemóvel, com os 10 acontecimentos, dados animados,
+«Como jogar», gravação automática e exportar ou importar (Menu). Próxima etapa: IA e simulador.
 
 ## Correr
 
@@ -29,7 +29,7 @@ sempre que há um push no `main`.
    upload pelo browser: deixa de fora as pastas e ficheiros que começam por ponto (`.github`, `.nojekyll`).
 2. No GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 3. Em **Actions**, espera que "Publicar no GitHub Pages" fique verde (1 a 2 minutos).
-4. O jogo fica em <https://bolinhared.github.io/Frontier/>.
+4. O jogo fica em <https://bolinhared.github.io/frontier/>.
 
 Primeira vez (repositório vazio), dentro desta pasta:
 

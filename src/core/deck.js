@@ -6,14 +6,14 @@ import { giveToken } from './bag.js';
 
 // Biomas repartidos o mais igualmente possível dentro de cada terreno; o ponto de partida
 // roda de terreno para terreno para que os totais por bioma também fiquem equilibrados.
-export function buildCards(players) {
-  const counts = DECK_COUNTS[players];
+export function buildCards(players, deck = null, biomes = BIOMES) {
+  const counts = deck || DECK_COUNTS[players];
   if (!counts) throw new Error('Número de jogadores inválido: ' + players);
   const cards = {}; let n = 0, offset = 0;
   for (const terrain of TERRAIN_ORDER) {
     for (let i = 0; i < counts[terrain]; i++) {
       const id = 'c' + String(++n).padStart(2, '0');
-      cards[id] = { terrain, biome: BIOMES[(offset + i) % BIOMES.length], presage: false };
+      cards[id] = { terrain, biome: biomes[(offset + i) % biomes.length], presage: false };
     }
     offset += counts[terrain];
   }
