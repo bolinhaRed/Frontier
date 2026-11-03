@@ -2,6 +2,7 @@
 import { STRUCTURES } from '../../data/structures.js';
 import { regionAt } from './regions.js';
 import { canPay } from '../points.js';
+import { key, neighbors } from '../hex.js';
 
 // Custo de uma estrutura (as relíquias do Solo podem mudá-lo em balance.costs).
 export const structureCost = (state, id) => state.balance.costs?.[id] || STRUCTURES[id].cost;
@@ -18,6 +19,12 @@ export function buildError(state, pid, structure, k) {
     if (s.on !== 'any' && !s.on.includes(c.terrain)) return `${s.name} não pode ser construída neste terreno.`;
   }
   if (s.onePerGame && state.built?.[structure]) return `Só há uma ${s.name} por partida.`;
+  if (state.mode === 'B') {
+    const [q, r] = k.split(',').map(Number);
+    const nb = neighbors(q, r).map(([a, b]) => state.board[key(a, b)]).filter(Boolean);
+    if ((structure === 'village' || structure === 'castle') && nb.some(n => n.structure === 'village' || n.structure === 'castle')) return 'No Frontier Rules, Aldeias e Castelos não podem ficar lado a lado.';
+    if (structure === 'farm' && !nb.some(n => n.kind === 'lake' || n.terrain === 'lake' || n.terrain === 'river')) return 'No Frontier Rules, a Quinta precisa de um Lago ou Rio ao lado.';
+  }
   if (s.minRegion) { const rg = regionAt(state, k); if (!rg || rg.hexes.length < s.minRegion) return `${s.name} precisa de uma região com ${s.minRegion} ou mais terrenos.`; }
   if (!canPay(state.players[pid], structureCost(state, structure))) return 'Não tens recursos para essa construção.';
   return null;

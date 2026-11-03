@@ -17,6 +17,7 @@ import { ring } from '../core/hex.js';
 import { writeSave, listSaves, readSave, deleteSave, exportSave, importSave, newSaveId } from '../storage/saves.js';
 import { showDice, hideDice } from './dice.js';
 import { helpHTML } from './help.js';
+import { chooseAction } from '../ai/ai.js';
 import { worldBoard, worldSideHTML, territoryHTML, territoryAt } from './world.js';
 import { loadCampaign, saveCampaign, recordResult, takeRelic, toggleRelic, borderFor, territory } from '../storage/campaign.js';
 import { buildScenario } from '../core/scenario.js';
@@ -33,10 +34,14 @@ const persist = () => { if (store && currentId) writeSave(store, currentId, stat
 const STEP_NAMES = ['Dados', 'Colocar', 'Acções', 'Repor'];
 const STEP_INDEX = { roll: 0, caravan: 0, place: 1, actions: 2, stones: 2, refill: 3, limit: 3 };
 const who = () => currentPlayer(state);   // quem decide agora (no acontecimento, quem escolhe)
-const needsCover = () => mode === 'game' && state && state.players.length > 1 && state.phase !== 'over' && who() != null && revealed !== who();
+const humans = () => state.players.filter(p => p.kind !== 'ai');
+const isAI = pid => pid != null && state.players[pid]?.kind === 'ai';
+const needsCover = () => mode === 'game' && state && humans().length > 1 && state.phase !== 'over' && who() != null && !isAI(who()) && revealed !== who();
 
-function newGame(names) {
-  state = createGame({ seed: randomSeed(), players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i] })) });
+function newGame(names, kinds = [], mode = 'A') {
+  state = createGame({ seed: randomSeed(), mode, players: names.map((n, i) => ({ name: n.trim() || 'Jogador ' + (i + 1), color: COLORS[i],
+    kind: (kinds[i] || 'human') === 'human' ? 'human' : 'ai', level: kinds[i] && kinds[i] !== 'human' ? kinds[i] : null })) });
+  if (state.players.every(p => p.kind === 'ai')) state.players[0].kind = 'human';
   chosen = picked = discard = null; revealed = null; lastMsg = ''; currentId = newSaveId(); hideDice(); mode = 'game';
   $('#dialog').hidden = true; persist(); render(); fit(); intro();
 }
@@ -50,12 +55,17 @@ function fit() {
 }
 
 // Ecrã de nova partida: número de jogadores e nomes.
-let draftNames = ['Jogador 1', 'Jogador 2'];
+let draftNames = ['Jogador 1', 'Jogador 2'], draftKinds = ['human', 'normal'], draftMode = 'A';
+let pending = null;   // Rio (ou outra peça com várias rotações) à espera de confirmação: { type, card, q, r, opts, i }
+const KIND_NAMES = { human: 'Pessoa', easy: 'IA fácil', normal: 'IA normal', hard: 'IA difícil' };
 function openNewGame() {
   const d = $('#dialog'); d.hidden = false;
-  d.innerHTML = `<div class="cover-box"><h2>Nova partida</h2><p class="hint">Free Frontier · 2 a 4 jogadores no mesmo aparelho</p>
+  d.innerHTML = `<div class="cover-box"><h2>Nova partida</h2><p class="hint">2 a 4 jogadores no mesmo aparelho</p>
+    <div class="count">${[['A', 'Free Frontier'], ['B', 'Frontier Rules']].map(([m, t]) => `<button class="btn small${draftMode === m ? ' primary' : ''}" data-mode="${m}">${t}</button>`).join('')}</div>
+    <p class="hint">${draftMode === 'B' ? 'Frontier Rules: os biomas têm de combinar, as Montanhas ficam junto a Colinas, os Rios ligam-se e há presságios.' : 'Free Frontier: qualquer terreno ao lado de outro.'}</p>
     <div class="count">${[2, 3, 4].map(n => `<button class="btn small${draftNames.length === n ? ' primary' : ''}" data-count="${n}">${n} jogadores</button>`).join('')}</div>
-    <div class="names">${draftNames.map((n, i) => `<label><i style="background:${COLORS[i]}"></i><input data-name="${i}" value="${esc(n)}" maxlength="16" aria-label="Nome do jogador ${i + 1}"></label>`).join('')}</div>
+    <div class="names">${draftNames.map((n, i) => `<label><i style="background:${COLORS[i]}"></i><input data-name="${i}" value="${esc(n)}" maxlength="16" aria-label="Nome do jogador ${i + 1}">
+      <select data-kind="${i}" aria-label="Quem joga no lugar ${i + 1}">${Object.entries(KIND_NAMES).map(([k, t]) => `<option value="${k}"${(draftKinds[i] || 'human') === k ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`).join('')}</div>
     ${state && state.phase !== 'over' ? '<p class="warn">A partida em curso será substituída.</p>' : ''}
     <div class="row-btns"><button class="btn" data-cancel>Cancelar</button><button class="btn primary" data-start>Começar</button></div></div>`;
 }
@@ -74,10 +84,11 @@ function openMenu(note = '') {
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
     <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
-    <p class="hint">Versão 6.1</p></div>`;
+    <p class="hint">Versão 1.0</p></div>`;
 }
 
 function act(a) {
+  pending = null;
   const before = state;
   const r = applyAction(state, a);
   if (!r.ok) { sound.play('error'); $('#msg').textContent = r.error; return; }
@@ -90,6 +101,17 @@ function act(a) {
   }
   finishAct(a);
 }
+// A IA joga sozinha, com uma pausa curta para se perceber o que fez.
+let aiTimer = null;
+function aiTurn() {
+  clearTimeout(aiTimer);
+  if (mode !== 'game' || !state || state.phase === 'over' || busy || !isAI(who())) return;
+  aiTimer = setTimeout(() => {
+    if (busy || !isAI(who()) || !$('#dialog').hidden) return aiTurn();
+    act(chooseAction(state, state.players[who()].level || 'normal'));
+  }, state.event ? 700 : 450);
+}
+
 function finishAct(a) {
   $('#msg').textContent = lastMsg;
   sound.play(['setupPlace', 'place', 'expand', 'build'].includes(a.type) ? 'place' : 'card');
@@ -118,7 +140,7 @@ function boardView() {
   const cells = [], used = new Set();
   const legal = new Set();
   const step = state.phase === 'setup' ? 'setup' : state.step;
-  if (step === 'setup' || step === 'place') emptyFrontier(state).forEach(k => legal.add(k));
+  if ((step === 'setup' || step === 'place') && !isAI(who())) legalActions(state).filter(a => (a.type === 'setupPlace' || a.type === 'place') && (!chosen || a.type === 'setupPlace' || a.card === chosen)).forEach(a => legal.add(a.q + ',' + a.r));
   if (step === 'actions' && chosen) legalActions(state).filter(a => a.type === 'expand' && a.card === chosen).forEach(a => legal.add(a.q + ',' + a.r));
   const doable = new Set(step === 'actions' && !chosen && !needsCover() ? legalActions(state).filter(a => a.type === 'build' || a.type === 'explore').map(a => a.q + ',' + a.r) : []);
   for (const [k, c] of Object.entries(state.board)) {
@@ -131,6 +153,7 @@ function boardView() {
       rot: c.structure ? 0 : (c.rot || 0) * Math.PI / 3, color: c.owner != null ? state.players[c.owner].color : null, token: c.token,
       mark: mark || (c.blocks && Object.keys(c.blocks).length ? '#5d5a55' : null) });
   }
+  if (pending) { const a = pending.opts[pending.i], c = state.cards[a.card || state.setup.card]; cells.push({ q: a.q, r: a.r, atlas: c.biome, tile: TERRAINS[c.terrain].tile, rot: a.rot * Math.PI / 3, mark: '#c8922e' }); used.add(a.q + ',' + a.r); }
   const R = Math.max(4, ...[...used].map(k => { const [q, r] = parseKey(k); return (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2 + 2; }));
   const slots = [];
   for (let d = 1; d <= R; d++) for (const [q, r] of ring(0, 0, d)) { const k = q + ',' + r; if (!used.has(k)) slots.push({ q, r, legal: legal.has(k) }); }
@@ -142,7 +165,7 @@ const cardHTML = (id, extra = '') => {
   return `<button class="card${id === chosen ? ' on' : ''}" data-card="${id}" ${extra}>
     <span class="art" style="${tileStyle(c.biome, t.tile, 76)}"></span>
     <span class="tok${tok === 6 || tok === 8 ? ' hot' : ''}">${tok ?? ''}</span>
-    <span class="nm">${esc(t.name)}</span><span class="bi">${esc(BIOME_NAMES[c.biome])}</span></button>`;
+    <span class="nm">${esc(t.name)}</span><span class="bi">${esc(BIOME_NAMES[c.biome])}</span>${c.presage ? '<span class="pres" title="Presságio: ao colocar, revela-se um acontecimento">✦</span>' : ''}</button>`;
 };
 const btn = (label, a, cls = '') => `<button class="btn small ${cls}" data-act='${esc(JSON.stringify(a))}'>${esc(label)}</button>`;
 const resText = r => Object.entries(r).filter(([, n]) => n).map(([k, n]) => `${n} ${RES(k)}`).join(' + ') || 'grátis';
@@ -250,7 +273,7 @@ function renderWorld() {
 function startSolo(id) {
   const t = territory(id);
   const scenario = buildScenario(t, camp.relics.equipped, borderFor(camp, t));
-  state = createGame({ seed: randomSeed(), players: [{ name: 'Tu', color: COLORS[0] }], scenario });
+  state = createGame({ seed: randomSeed(), mode: scenario.mode, players: [{ name: 'Tu', color: COLORS[0] }], scenario });
   chosen = picked = discard = null; revealed = 0; lastMsg = ''; currentId = newSaveId(); mode = 'game';
   persist(); render(); fit(); intro();
 }
@@ -294,6 +317,7 @@ function guideHTML() {
   const off = ' <button class="link" data-tips>Esconder dicas</button>';
   if (s.event) return '<b>Acontecimento.</b> Lê o cartão e escolhe uma opção. Os efeitos «não produzem» duram 2 rondas.' + off;
   if (s.phase === 'over') return '';
+  if (isAI(who())) return '';
   if (s.phase === 'setup') return '<b>Preparação.</b> Toca num hexágono marcado para pôr este terreno. Cada terreno produz quando sair o número dele nos dados. Terrenos da mesma família lado a lado formam regiões, que dão pontos.' + off;
   const L = legalActions(s);
   const T = {
@@ -324,6 +348,7 @@ function stepsHTML() {
 
 function render() {
   if (mode === 'world') return renderWorld();
+  if (humans().length === 1 && who() != null && !isAI(who())) revealed = who();   // uma só pessoa: nunca é preciso passar o aparelho
   const covered = needsCover();
   $('#cover').hidden = !covered;
   if (covered) $('#cover').innerHTML = coverHTML();
@@ -350,7 +375,13 @@ function render() {
     const L = legalActions(s);
     if (s.step === 'roll') tools = btn('Lançar os dados', { type: 'roll', player: s.active }, 'primary');
     if (s.step === 'caravan') tools = '<span class="hint">Saiu 7 (Caravana). Escolhe:</span>' + L.map(a => btn(a.option === 'trade' ? 'Trocas a 2 por 1 neste turno' : '+1 ' + RES(a.resource), a)).join('');
-    if (s.step === 'place') { handBtns = ''; tools = p.hand.length ? '<span class="hint">Escolhe uma carta e toca num hexágono marcado.</span>' : btn('Turno sem colocação', { type: 'skipPlace', player: s.active }); }
+    if (s.step === 'place') {
+      handBtns = '';
+      const L2 = legalActions(s);
+      if (L2.some(a => a.type === 'redrawHand')) tools = '<span class="hint">Nenhuma carta da mão cabe em lado nenhum.</span>' + btn('Trocar a mão (3 cartas novas)', { type: 'redrawHand', player: s.active }, 'primary');
+      else if (L2.length === 1 && L2[0].type === 'skipPlace') tools = btn('Turno sem colocação', { type: 'skipPlace', player: s.active });
+      else tools = '<span class="hint">Escolhe uma carta e toca num hexágono marcado.' + (L2.some(a => a.ignoreBiomes) ? ' Desta vez podes ignorar os biomas.' : '') + '</span>';
+    }
     if (s.step === 'actions') {
       handBtns = L.some(a => a.type === 'expand') ? '' : 'disabled';
       const trades = L.filter(a => a.type === 'trade');
@@ -374,18 +405,21 @@ function render() {
         + RESOURCES.map(r => `<span class="stepper">${RES(r)} ${discard[r]} <button class="btn small" data-dis="${r}" ${discard[r] >= p.resources[r] || left <= 0 ? 'disabled' : ''}>+</button><button class="btn small" data-undis="${r}" ${discard[r] ? '' : 'disabled'}>−</button></span>`).join('')
         + (left === 0 ? btn('Devolver', { type: 'discard', player: s.active, give: discard }, 'primary') : '');
     }
-    $('#hand').innerHTML = covered ? '' : p.hand.map(id => cardHTML(id, handBtns)).join('') || '<span class="hint">Sem cartas na mão.</span>';
+    $('#hand').innerHTML = covered ? '' : isAI(s.active) ? `<span class="hint">${esc(p.name)} está a pensar…</span>` : p.hand.map(id => cardHTML(id, handBtns)).join('') || '<span class="hint">Sem cartas na mão.</span>';
+    if (isAI(who())) tools = '';
     if (covered) tools = '';
   } else {
     $('#hand').innerHTML = '';
   }
   if (s.lastEvent && !s.event && lastShown !== s.lastEvent.id + s.lastEvent.round) { lastShown = s.lastEvent.id + s.lastEvent.round; lastMsg = `Acontecimento: ${EVENTS[s.lastEvent.id].name}.`; $('#msg').textContent = lastMsg; }
+  if (pending) tools = `<span class="hint">Escolhe a rotação do Rio (${pending.i + 1} de ${pending.opts.length}).</span>${'<button class="btn small" data-rot>↻ Rodar</button><button class="btn small primary" data-confirm>Confirmar</button><button class="btn small" data-unpend>Cancelar</button>'}`;
   $('#head').innerHTML = head;
   $('#guide').innerHTML = guideHTML();
   $('#tools').innerHTML = s.phase === 'over' ? finalHTML() : tools;
   $('#market').innerHTML = s.market.map(id => cardHTML(id, s.phase === 'turn' && s.step === 'refill' && p.resources.food >= 1 ? 'data-buy="1"' : 'disabled')).join('');
   $('.panel').classList.toggle('over', s.phase === 'over');
   if (s.phase === 'over') hideDice();
+  aiTurn();
   $('.panel').classList.toggle('in-event', !!s.event);
 }
 
@@ -393,16 +427,23 @@ function onHex(h) {
   if (!h) return;
   if (mode === 'world') { const t = territoryAt(h.q, h.r); selT = t ? t.id : null; renderWorld(); return; }
   const s = state, k = h.q + ',' + h.r;
-  if (s.phase === 'setup') return act({ type: 'setupPlace', player: s.active, q: h.q, r: h.r, rot: 0 });
+  if (isAI(who())) return;
+  const tryPlace = (type, card) => {
+    const opts = legalActions(s).filter(a => a.type === type && a.q === h.q && a.r === h.r && (!card || a.card === card));
+    if (!opts.length) { $('#msg').textContent = s.mode === 'B' ? 'Aqui não pode ser: confere os biomas vizinhos, as Montanhas (junto a Colinas) e as aberturas dos Rios.' : 'Aqui não pode ser.'; return true; }
+    if (opts.length === 1) { act(opts[0]); return true; }
+    pending = { opts, i: 0 }; render(); return true;
+  };
+  if (s.phase === 'setup') return tryPlace('setupPlace');
   if (s.phase !== 'turn') return;
   const p = s.players[s.active];
   if (s.step === 'place') {
     const card = chosen || (p.hand.length === 1 ? p.hand[0] : null);
     if (!card) { $('#msg').textContent = 'Escolhe primeiro uma carta da mão.'; return; }
-    return act({ type: 'place', player: s.active, card, q: h.q, r: h.r, rot: 0 });
+    return tryPlace('place', card);
   }
   if (s.step === 'actions') {
-    if (chosen && !s.board[k]) return act({ type: 'expand', player: s.active, card: chosen, q: h.q, r: h.r, rot: 0 });
+    if (chosen && !s.board[k]) return tryPlace('expand', chosen);
     picked = s.board[k] ? k : null; render();
   }
 }
@@ -440,7 +481,11 @@ function bind() {
     if (b.dataset.side != null) { $('#side').classList.toggle('open'); return; }
     if (b.dataset.openNew != null) { draftNames = state ? state.players.map(p => p.name) : draftNames; openNewGame(); return; }
     if (b.dataset.count) { const n = +b.dataset.count; draftNames = Array.from({ length: n }, (_, i) => draftNames[i] || 'Jogador ' + (i + 1)); openNewGame(); return; }
-    if (b.dataset.start != null) return newGame(draftNames);
+    if (b.dataset.mode) { draftMode = b.dataset.mode; openNewGame(); return; }
+    if (b.dataset.start != null) return newGame(draftNames, draftKinds, draftMode);
+    if (b.dataset.rot != null) { pending.i = (pending.i + 1) % pending.opts.length; render(); return; }
+    if (b.dataset.confirm != null) { const a = pending.opts[pending.i]; pending = null; return act(a); }
+    if (b.dataset.unpend != null) { pending = null; render(); return; }
     if (b.dataset.cancel != null) { if (state) $('#dialog').hidden = true; else openMenu(); return; }
   });
   document.addEventListener('change', async e => {
@@ -450,6 +495,7 @@ function bind() {
     resume(readSave(store, r.id));
   });
   document.addEventListener('input', e => { const i = e.target.dataset?.name; if (i != null) draftNames[+i] = e.target.value; });
+  document.addEventListener('change', e => { const i = e.target.dataset?.kind; if (i != null) { draftKinds[+i] = e.target.value; if (e.target.value !== 'human' && /^Jogador \d$/.test(draftNames[+i])) { draftNames[+i] = KIND_NAMES[e.target.value]; openNewGame(); } } });
   const mb = $('#music');
   const setMusic = on => { mb.setAttribute('aria-pressed', on); mb.textContent = on ? 'Música: ligada' : 'Música: desligada'; try { localStorage.setItem('frontier.music', on ? '1' : '0'); } catch {} };
   mb.addEventListener('click', () => { const on = mb.getAttribute('aria-pressed') !== 'true'; on ? sound.startMusic() : sound.stopMusic(); setMusic(on); });
@@ -464,6 +510,8 @@ async function start() {
   view = new MapView($('#map'), { onSelect: onHex });
   bind();
   openMenu();       // menu principal: Campanha Solo, partida de 2 a 4, partidas guardadas
+  // Jogar sem internet e instalar como aplicação (só em https ou localhost).
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('./sw.js').catch(() => {});
   if (location.hash === '#debug') window.FRONTIER = { get state() { return state; }, set state(v) { state = v; render(); }, view, act };
 }
 start();

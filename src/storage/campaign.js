@@ -21,11 +21,16 @@ const neighbours = (a, b) => { const [i, j] = a.grid, [k, l] = b.grid; const d =
 export function regionOpen(c, regionId) {
   const R = REGIONS.find(r => r.id === regionId);
   if (!R || R.locked) return false;
-  return !R.needs || TERRITORIES.filter(t => t.region === R.needs).every(t => conquered(c, t.id));
+  if (R.stars && totalStars(c) < R.stars) return false;
+  const needs = R.id === 5 ? [3, 4] : R.needs ? [R.needs] : [];
+  return needs.every(n => TERRITORIES.filter(t => t.region === n).every(t => conquered(c, t.id)));
 }
 export function isAvailable(c, t) {
   if (!t.main || !regionOpen(c, t.region)) return false;
   if (t.id === 1 || conquered(c, t.id)) return true;
+  // o 1.º território de uma região que acabou de abrir também fica disponível
+  const first = TERRITORIES.find(o => o.region === t.region);
+  if (first.id === t.id && t.region > 1) return true;
   return TERRITORIES.some(o => conquered(c, o.id) && neighbours(o, t));
 }
 

@@ -6,6 +6,10 @@ import { PUBLIC_OBJECTIVES, PRIVATE_OBJECTIVES } from '../data/objectives.js';
 import { applyContribution, payMilestones } from './rules/regions.js';
 import { checkPublicObjectives } from './rules/objectives.js';
 import { award } from './points.js';
+import { hasSpot, riverComponents } from './rules/placement-b.js';
+import { returnCard } from './bag.js';
+import { PRESAGES } from '../data/deck.js';
+import { PRESAGE_SHARE, RIVER_LONG } from '../data/frontier-rules.js';
 import { key, DIRS } from './hex.js';
 import { rngState, shuffle, asFn, nextInt } from './rng.js';
 import { freshBag } from './bag.js';
@@ -16,7 +20,7 @@ export const RULES_VERSION = '1.4';
 
 // scenario (campanha Solo): 1 jogador, área, baralho, locais, rondas, recursos, valores e objectivo do território.
 export function createGame({ seed = 'FRONTIER', mode = 'A', players, scenario = null }) {
-  if (mode !== 'A') throw new Error('Só o Modo A está implementado (etapa 1).');
+  if (mode !== 'A' && mode !== 'B') throw new Error('Modo desconhecido.');
   const min = scenario ? 1 : 2, max = scenario ? 1 : 4;
   if (!Array.isArray(players) || players.length < min || players.length > max) throw new Error(scenario ? 'O Solo tem 1 jogador.' : 'A partida tem 2 a 4 jogadores.');
   const N = players.length;
@@ -27,14 +31,21 @@ export function createGame({ seed = 'FRONTIER', mode = 'A', players, scenario = 
     phase: 'setup', round: 0, maxRounds: scenario ? scenario.rounds : BALANCE.rounds[N],
     area: scenario ? scenario.area : null, events: scenario ? scenario.events : true,
     order: [], active: null, step: null,
-    players: players.map((p, i) => ({ id: i, name: p.name || 'Jogador ' + (i + 1), kind: p.kind || 'human', color: p.color || null,
+    players: players.map((p, i) => ({ id: i, name: p.name || 'Jogador ' + (i + 1), kind: p.kind || 'human', level: p.level || null, color: p.color || null,
       resources: { wood: 0, stone: 0, food: 0 }, hand: [], score: 0, points: {}, private: null })),
-    cards: buildCards(N, scenario?.deck, scenario?.biomes), deck: [], market: [], tokens: {}, bag: freshBag(), bagsOpened: 1, deckExhausted: false,
+    cards: buildCards(N, scenario?.deck, scenario?.biomes),
+    riversScored: [], deck: [], market: [], tokens: {}, bag: freshBag(), bagsOpened: 1, deckExhausted: false,
     board: {}, regions: [], built: {}, setup: null, turn: null,
     publicObjectives: [], eventDeck: [], eventDiscard: [], event: null, eventCount: 0, effects: [], final: null, log: [],
   };
   // 1. Ordem dos jogadores e baralho
   state.order = shuffle([...Array(N).keys()], asFn(state.rng));
+  // Modo B: 10% das cartas com presságio (5 / 7 / 8), sorteadas pela seed.
+  if (mode === 'B') {
+    const ids = shuffle(Object.keys(state.cards), asFn(state.rng));
+    const n = scenario ? Math.round(ids.length * PRESAGE_SHARE) : PRESAGES[N];
+    ids.slice(0, n).forEach(id => { state.cards[id].presage = true; });
+  }
   state.deck = shuffledDeck(state);
   // 2. Lago neutro no centro
   state.board[key(0, 0)] = { kind: 'lake', terrain: 'lake', biome: 'greenlands', owner: null, token: null };
@@ -82,7 +93,23 @@ export function createGame({ seed = 'FRONTIER', mode = 'A', players, scenario = 
 export function beginSetupPlacement(state) {
   const s = state.setup;
   state.active = s.seq[s.index];
-  s.card = drawCard(state);
+  s.ignore = false;
+  if (state.mode !== 'B') { s.card = drawCard(state); return; }
+  // Modo B: tira cartas do topo até uma ter posição legal; as que não têm voltam ao fundo (ficha ao saco).
+  // Se a carta do topo já foi devolvida nesta colocação (volta completa), passa a ignorar os biomas.
+  const D = new Set();
+  for (;;) {
+    if (D.has(state.deck[0])) { s.ignore = true; break; }
+    const c = drawCard(state);
+    if (hasSpot(state, c)) { s.card = c; return; }
+    returnCard(state, c); D.add(c);
+  }
+  for (let guard = 0; guard < 500; guard++) {
+    const c = drawCard(state);
+    if (hasSpot(state, c, { ignoreBiomes: true })) { s.card = c; return; }
+    returnCard(state, c);
+  }
+  throw new Error('Sem carta possível na preparação do Modo B.');
 }
 
 // 8. Mãos e mercado; começa a ronda 1.
@@ -107,6 +134,19 @@ export function placeTerrain(state, cardId, q, r, rot, pid) {
   applyContribution(state, k, pid, state.cards[cardId].terrain);
   placeCard(state, cardId, q, r, rot, pid);
   payMilestones(state, k, award);
+  if (state.mode === 'B' && state.cards[cardId].terrain === 'river') scoreRivers(state);
+}
+
+// Rio longo (Modo B): um rio contínuo com 4 troços dá 2 pontos a cada dono de pelo menos um troço.
+// Cada rio pontua uma vez; um rio unido a outro já pontuado conta como pontuado.
+function scoreRivers(state) {
+  for (const comp of riverComponents(state)) {
+    if (comp.some(k => state.riversScored.includes(k))) { comp.forEach(k => { if (!state.riversScored.includes(k)) state.riversScored.push(k); }); continue; }
+    if (comp.length < RIVER_LONG.length) continue;
+    const owners = [...new Set(comp.map(k => state.board[k].owner).filter(o => o != null))];
+    owners.forEach(pid => award(state, pid, 'rivers', RIVER_LONG.points));
+    state.riversScored.push(...comp);
+  }
 }
 
 // Terreno no mapa a partir de uma carta.

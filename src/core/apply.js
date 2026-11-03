@@ -24,7 +24,7 @@ const STEPS = {
   setup: { setupPlace },
   roll: { roll },
   caravan: { caravan },
-  place: { place, skipPlace: place },
+  place: { place, skipPlace: place, redrawHand: place },
   actions: { build, expand, explore, trade, endActions, concludeSolo: endActions },
   stones: { reorderEvents: { legal: explore.legalReorder, apply: explore.applyReorder } },
   refill: { drawDeck: refill, buyMarket: refill },

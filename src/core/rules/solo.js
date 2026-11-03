@@ -25,6 +25,13 @@ export const MAIN_CHECKS = {
   exploreAll: s => Object.values(s.board).filter(c => c.kind === 'site').every(c => c.explored === 0),
   castle: s => structuresOf(s, 0, c => c.structure === 'castle') >= 1,
   rangeRegion: (s, m) => s.regions.some(rg => rg.family === 'range' && rg.hexes.length >= m.n),
+  riverLong: s => (s.riversScored || []).length > 0,
+  pass: s => structuresOf(s, 0, c => c.structure === 'keep') >= 2 && s.regions.some(rg => rg.family === 'range' && rg.hexes.length >= 5),
+  oasis: s => ownTerrains(s, 0).filter(([, c]) => c.terrain === 'lake' || c.terrain === 'river').length >= 4 && structuresOf(s, 0, c => c.structure === 'farm') >= 3,
+  volcano: s => Object.entries(s.board).some(([k, c]) => c.kind === 'volcano' && neighbors(...k.split(',').map(Number)).some(([a, b]) => { const n = s.board[key(a, b)]; return n && n.owner === 0 && n.structure; })),
+  lost: s => Object.values(s.board).some(c => c.site === 'graveyard' && c.explored === 0) && structuresOf(s, 0, c => c.structure === 'wonder') >= 1,
+  heart: s => structuresOf(s, 0, c => c.structure === 'wonder') >= 1 && s.regions.filter(rg => rg.hexes.length >= 5).length >= 3
+    && Object.values(s.board).filter(c => c.kind === 'site').every(c => c.explored === 0),
   // Encruzilhada: só se avalia depois dos 2 acontecimentos.
   survive: s => (s.eventDiscard || []).length >= 2 && !s.event && !(s.players[0].points.events < 0)
     && !own(s, 0).some(([, c]) => c.kind === 'deadtrees') && structuresOf(s, 0) >= 4

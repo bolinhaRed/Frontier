@@ -3,6 +3,7 @@
   "short_name": "Frontier",
   "description": "Estratégia com terrenos hexagonais, para 2 a 4 jogadores no mesmo dispositivo.",
   "lang": "pt-PT",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

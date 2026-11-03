@@ -6,6 +6,7 @@ import { SITES } from '../../data/sites.js';
 import { RESOURCES } from '../../data/terrains.js';
 import { exploreError, exploreCost } from '../rules/sites.js';
 import { award, pay } from '../points.js';
+import { startEvent } from '../rules/events.js';
 
 const PAIRS = RESOURCES.flatMap((a, i) => RESOURCES.slice(i).map(b => [a, b]));
 
@@ -24,7 +25,7 @@ export function apply(state, a) {
   const k = a.q + ',' + a.r, err = exploreError(state, state.active, k);
   if (err) return err;
   const c = state.board[k], site = SITES[c.site], p = state.players[state.active];
-  if (site.reward?.triggerEvent) return 'O Cemitério só existe no Modo B.';
+  if (site.reward?.triggerEvent && state.mode !== 'B') return 'O Cemitério só existe no Modo B.';
   if (site.reward?.choose) {
     if (!Array.isArray(a.take) || a.take.length !== site.reward.choose || !a.take.every(r => RESOURCES.includes(r)))
       return 'Nas Ruínas escolhe 2 recursos.';
@@ -35,6 +36,7 @@ export function apply(state, a) {
   award(state, state.active, 'sites', site.points);
   if (site.reward?.choose) a.take.forEach(r => { p.resources[r] += 1; });
   if (site.reward?.stone) p.resources.stone += site.reward.stone;
+  if (site.reward?.triggerEvent) { startEvent(state, state.active); return; }   // Cemitério: o próximo acontecimento, já
   if (site.reward?.peekEvents) {
     const n = Math.min(site.reward.peekEvents, state.eventDeck.length);
     if (n > 0) { state.turn.peek = state.eventDeck.slice(0, n); state.step = 'stones'; }

@@ -2,11 +2,14 @@
 // uma segunda carta da mão numa posição legal.
 import { canPlaceA, emptyFrontier, parseKey } from '../rules/placement-a.js';
 import { placeTerrain } from '../state.js';
+import { canPlaceB, legalSpots } from '../rules/placement-b.js';
+import { startEvent } from '../rules/events.js';
 import { canPay, pay } from '../points.js';
 
 export function legal(state) {
   const p = state.players[state.active], t = state.turn;
   if (!t.placed || t.expanded || !p.hand.length || !canPay(p, state.balance.expansionCost)) return [];
+  if (state.mode === 'B') return p.hand.flatMap(card => legalSpots(state, card).map(x => ({ type: 'expand', player: state.active, card, ...x })));
   const spots = emptyFrontier(state).map(parseKey);
   return p.hand.flatMap(card => spots.map(([q, r]) => ({ type: 'expand', player: state.active, card, q, r, rot: 0 })));
 }
@@ -17,9 +20,10 @@ export function apply(state, a) {
   const i = p.hand.indexOf(a.card); if (i < 0) return 'Essa carta não está na tua mão.';
   if (!canPay(p, state.balance.expansionCost)) return 'A Expansão custa 2 Madeira e 2 Provisões.';
   if (!Number.isInteger(a.rot) || a.rot < 0 || a.rot > 5) return 'Rotação inválida (0 a 5).';
-  if (!canPlaceA(state, a.q, a.r)) return 'Esse hexágono não está livre ou não toca em nenhum ocupado.';
+  if (state.mode === 'B' ? !canPlaceB(state, a.card, a.q, a.r, a.rot) : !canPlaceA(state, a.q, a.r)) return 'Essa posição não é legal.';
   pay(p, state.balance.expansionCost);
   p.hand.splice(i, 1);
   placeTerrain(state, a.card, a.q, a.r, a.rot, state.active);
   t.expanded = true;
+  if (state.cards[a.card].presage) startEvent(state, state.active);   // presságio na Expansão também dispara
 }
