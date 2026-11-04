@@ -1,180 +1,153 @@
-// Interface do modo «Quatro Nações». Separada do resto: o app.js só a liga ao menu.
-import { createNations, act, placements, reachable, tileDefense, chanceVsFixed, chanceVsPawn, recruitSpots, recruitCost, towerCost, pawnAt, score,
-  NATIONS, ORDER, RULES, LEGENDARY_NAMES } from '../nations/engine.js';
+// Interface das Quatro Nações (v2). Separada do resto: o app.js só a liga ao menu.
+// Um toque num hexágono marcado conquista-o (o custo está escrito nele); um toque numa terra tua junta-lhe 1 tropa da
+// mão; «Desfazer» volta atrás dentro do turno. Mostra os pontos que a ronda vai dar antes de terminar o turno.
+import { createNations, act, targets, conquerCost, pointsFor, NATIONS, ORDER, RULES, LEGENDARY_NAMES } from '../nations/engine.js';
 import { aiAction } from '../nations/ai.js';
-import { placementScore } from '../expedition/engine.js';
 import { KINDS, isPathTile } from '../expedition/tiles.js';
-import { tileStyle, pathStyle } from './assets.js';
-import { ring, key, neighbors } from '../core/hex.js';
+import { ring } from '../core/hex.js';
 import { randomSeed } from './seed.js';
 
-const SAVE = 'frontier.nations';
-const STRUCT_TILE = { castle: 'city', tower: 'tower' }, LEG_TILE = { temple: 'wonder', volcano: 'vulcano', crystals: 'crystals' };
-const NAMES = { plain: 'Planície', forest: 'Floresta', woods: 'Bosque', hills: 'Colinas', mountains: 'Montanhas', lake: 'Lago', village: 'Aldeia',
-  road_straight: 'Estrada', road_bend: 'Estrada em curva', road_fork: 'Cruzamento', river_straight: 'Rio', river_bend: 'Rio em curva', river_bend2: 'Rio em curva', bridge: 'Ponte' };
-const pct = x => Math.round(x * 100) + '%';
+const SAVE = 'frontier.nations', SEEN = 'frontier.nations.tutorial';
+const LEG_TILE = { temple: 'wonder', volcano: 'vulcano', crystals: 'crystals' };
+const KIND_NAME = { plain: 'Planície', forest: 'Floresta', woods: 'Bosque', hills: 'Colinas', mountains: 'Montanhas', lake: 'Lago', village: 'Aldeia' };
+const PAWN_IMG = {}, portrait = n => `./assets/nations/portrait-${n}.webp`;
+const nameOf = c => (c.legendary ? LEGENDARY_NAMES[c.legendary] : c.path === 'river' ? 'Rio' : c.path === 'road' ? 'Estrada' : KIND_NAME[c.kind] || 'Terreno');
 
 export function createNationsUI({ $, esc, view, store }) {
-  let s = null, sel = null, handI = 0, rot = 0, ghost = null, msg = '', revealed = null, timer = null, draft = ['human', 'normal'];
+  for (const n of ORDER) { const im = new Image(); im.onload = () => { if (s) render(); }; im.src = `./assets/nations/pawn-${n}.png`; PAWN_IMG[n] = im; }
+  let s = null, undo = [], msg = '', revealed = null, timer = null, tutorial = true;
+  let draft = [{ nation: 'nature', kind: 'human' }, { nation: 'fire', kind: 'normal' }];
   const save = () => { try { store?.setItem(SAVE, JSON.stringify(s)); } catch {} };
   const fit = () => view.fitAll($('.topbar').getBoundingClientRect().bottom, innerHeight - $('.panel').getBoundingClientRect().top);
-  const me = () => s.players[s.active];
-  const isAI = () => me().kind === 'ai';
-  const humans = () => s.players.filter(p => p.kind !== 'ai');
-  const art = c => {
-    if (c.legendary) return { atlas: c.biome, tile: LEG_TILE[c.legendary] };
-    if (c.structure) return { atlas: c.biome, tile: STRUCT_TILE[c.structure] };
-    return isPathTile(c.kind) ? { atlas: 'paths-' + c.biome, tile: c.kind } : { atlas: c.biome, tile: KINDS[c.kind].art };
-  };
-  const tileHTML = (t, w, r = 0) => `<span class="art" style="${isPathTile(t.kind) ? pathStyle(t.biome, t.kind, w) : tileStyle(t.biome, KINDS[t.kind].art, w)};transform:rotate(${r * 60}deg)"></span>`;
+  const me = () => s.players[s.active], isAI = () => me().kind === 'ai', humans = () => s.players.filter(p => p.kind !== 'ai');
+  const art = c => (c.legendary ? { atlas: c.biome, tile: LEG_TILE[c.legendary] } : isPathTile(c.kind) ? { atlas: 'paths-' + c.biome, tile: c.kind } : { atlas: c.biome, tile: KINDS[c.kind].art });
 
   function board() {
-    const cells = [], used = new Set();
-    const reach = sel != null && s.step === 'act' ? reachable(s, sel) : {};
-    const pawnsAt = new Map(); for (const p of s.players) for (const w of p.pawns) pawnsAt.set(w.at, { p, w });
-    const legal = new Set(s.step === 'place' && !isAI() && s.hand[handI] ? placements(s).filter(a => a.i === handI && a.rot === rot).map(a => a.q + ',' + a.r) : []);
-    const selW = sel != null ? me().pawns.find(w => w.id === sel) : null;
-    const enemyNear = new Set(selW && s.ap >= 1 ? neighbors(...selW.at.split(',').map(Number)).map(([a, b]) => key(a, b)).filter(k => { const t = pawnAt(s, k); return t && t.player.id !== s.active; }) : []);
+    const cells = [], T = new Map(!isAI() && !s.over ? targets(s).map(t => [t.k, t.cost]) : []);
     for (const [k, c] of Object.entries(s.board)) {
-      const [q, r] = k.split(',').map(Number); used.add(k); const a = art(c), pw = pawnsAt.get(k);
-      cells.push({ q, r, atlas: a.atlas, tile: a.tile, rot: c.structure || c.legendary ? 0 : (c.rot || 0) * Math.PI / 3, color: c.owner != null ? NATIONS[s.players[c.owner].nation].color : null,
-        mark: enemyNear.has(k) ? '#a8321f' : reach[k] != null ? '#2c6a97' : c.legendary && c.owner == null ? '#7a2f8f' : null,
-        pawn: pw ? { color: NATIONS[pw.p.nation].color, letter: NATIONS[pw.p.nation].letter, level: pw.w.level, selected: pw.p.id === s.active && pw.w.id === sel } : null });
+      const [q, r] = k.split(',').map(Number), a = art(c), N = c.owner != null ? NATIONS[s.players[c.owner].nation] : null;
+      const affordable = T.has(k) && T.get(k) <= s.hand;
+      cells.push({ q, r, atlas: a.atlas, tile: a.tile, rot: (c.rot || 0) * Math.PI / 3, color: N ? N.color : null,
+        token: T.has(k) ? T.get(k) : null, mark: T.has(k) ? (affordable ? '#2c6a97' : '#a8321f') : c.legendary && c.owner == null ? '#7a2f8f' : null,
+        pawn: N ? { color: N.color, letter: N.letter, count: c.troops, img: PAWN_IMG[s.players[c.owner].nation] } : null });
     }
-    if (ghost) { const t = s.hand[handI], a = isPathTile(t.kind) ? { atlas: 'paths-' + t.biome, tile: t.kind } : { atlas: t.biome, tile: KINDS[t.kind].art }; cells.push({ q: ghost.q, r: ghost.r, atlas: a.atlas, tile: a.tile, rot: rot * Math.PI / 3, mark: ghost.ok ? '#3f7a3a' : '#a8321f' }); used.add(ghost.q + ',' + ghost.r); }
-    let R = 4; for (const k of used) { const [q, r] = k.split(',').map(Number); R = Math.max(R, (Math.abs(q) + Math.abs(r) + Math.abs(q + r)) / 2 + 1); }
-    const slots = []; for (let d = 1; d <= R; d++) for (const [q, r] of ring(0, 0, d)) { const k = q + ',' + r; if (!used.has(k)) slots.push({ q, r, legal: legal.has(k) }); }
+    const used = new Set(Object.keys(s.board)), slots = [];
+    for (let d = 1; d <= 5; d++) for (const [q, r] of ring(0, 0, d)) { const k = q + ',' + r; if (!used.has(k)) slots.push({ q, r }); }
     return { cells, slots };
   }
 
   function sideHTML() {
-    const leg = Object.values(s.board).filter(c => c.legendary);
     return `<h2>Quatro Nações · ronda ${s.round} de ${RULES.rounds}</h2>
-      <ol class="players">${s.players.map(p => { const N = NATIONS[p.nation], tiles = Object.values(s.board).filter(c => c.owner === p.id).length;
-        return `<li class="${p.id === s.active ? 'act' : ''}"><i style="background:${N.color}"></i><b>${esc(N.name)}</b>${p.kind === 'ai' ? ` <small>(IA ${({ easy: 'fácil', normal: 'normal', hard: 'difícil' })[p.level] || ''})</small>` : ''} <span class="pts">${score(s, p.id)} pts</span>
-          <span class="chips"><span class="chip">Ouro <b>${p.gold}</b></span><span class="chip">Terras <b>${tiles}</b></span><span class="chip">Peões <b>${p.pawns.length}</b></span></span>
+      <ol class="players">${[...s.players].sort((a, b) => b.score - a.score).map(p => { const N = NATIONS[p.nation], terras = Object.values(s.board).filter(c => c.owner === p.id).length;
+        return `<li class="${p.id === s.active ? 'act' : ''}"><img class="portrait" src="${portrait(p.nation)}" alt="" style="border-color:${N.color}"><b>${esc(N.name)}</b>${p.kind === 'ai' ? ` <small>(IA ${({ easy: 'fácil', normal: 'normal', hard: 'difícil' })[p.level]})</small>` : ''}
+          <span class="pts">${p.score} pts</span><span class="chips"><span class="chip">Terras <b>${terras}</b></span><span class="chip">Última ronda <b>+${p.lastPoints}</b></span></span>
           <small>${esc(N.text)}</small></li>`; }).join('')}</ol>
-      <h2>Locais lendários</h2><ul class="objs">${leg.map(c => `<li>${LEGENDARY_NAMES[c.legendary]}: ${c.owner == null ? 'livre' : esc(NATIONS[s.players[c.owner].nation].short)}</li>`).join('')}</ul>
-      <h2>Como se ganha</h2><ul class="objs"><li>Os 3 lendários no início de 2 turnos teus seguidos;</li><li>ou mais de metade do mapa;</li><li>ou mais pontos no fim da ronda ${RULES.rounds} (1 por terra, 3 por lendário, 2 por estrutura).</li></ul>`;
+      <h2>Como se joga</h2><ul class="objs">
+      <li>No início do turno recolhes as tropas: fica 1 em cada terra tua; as outras voltam à mão (+1 por Aldeia tua).</li>
+      <li>Conquistar custa 2 tropas + as tropas inimigas lá + 1 em Montanha + 1 nas Badlands. O custo está escrito no hexágono.</li>
+      <li>A 1.ª conquista é na borda do mapa; as seguintes ao lado das tuas terras. Lagos, só os Espíritos do Gelo.</li>
+      <li>No fim do turno ganhas 1 ponto por terra, +2 por lendário (Templo, Vulcão, Cristais) e os bónus da tua nação.</li>
+      <li>Quem perde uma terra perde 1 tropa; as outras voltam-lhe para a mão.</li><li>Ao fim de ${RULES.rounds} rondas ganha quem tiver mais pontos.</li></ul>`;
+  }
+
+  function guideText() {
+    if (isAI()) return `${esc(me().name)} (IA) a jogar…`;
+    const own = Object.values(s.board).some(c => c.owner === s.active), T = targets(s).filter(t => t.cost <= s.hand), pts = pointsFor(s, s.active);
+    const end = `Se terminares agora, ganhas <b>+${pts} pontos</b> nesta ronda.`;
+    if (!tutorial) return `${s.hand} tropas na mão. ${end}`;
+    if (!own) return '<b>Começa aqui.</b> Ainda não tens terras: escolhe um hexágono da <b>borda</b> marcado a azul. O número é o custo em tropas. Escolhe terras que valham pontos à tua nação.';
+    if (T.length && s.hand >= 2) return `Tens <b>${s.hand} tropas</b>. Continua a conquistar ao lado das tuas terras (azul = consegues pagar; vermelho = falta-te tropas). Cada terra dá pontos em todas as rondas. ${end}`;
+    return `Já não dá para mais conquistas. Podes tocar nas tuas terras da fronteira para lhes juntar tropas (defendem-nas), ou carregar em «Terminar turno» (as que sobram vão para a fronteira). ${end}`;
   }
 
   function render() {
-    clearTimeout(timer);
-    if (!s) return;
+    clearTimeout(timer); if (!s) return;
     view.setBoard(board());
     $('#side').innerHTML = sideHTML();
-    $('.panel').classList.remove('over', 'expedition', 'unknown'); $('.panel').classList.toggle('in-event', s.step !== 'place' || isAI() || s.over);
-    $('#steps').innerHTML = s.over ? '<span class="on">Fim</span>' : `<span class="${s.step === 'place' ? 'on' : ''}">1. Colocar</span><span class="${s.step === 'act' ? 'on' : ''}">2. Acções</span>`;
+    $('.panel').classList.remove('over', 'expedition', 'unknown'); $('.panel').classList.add('in-event');
+    $('#steps').innerHTML = s.over ? '<span class="on">Fim</span>' : `<span class="on">Ronda ${s.round}/${RULES.rounds}</span>`;
     const N = NATIONS[me().nation];
-    // passar o aparelho entre pessoas
     const cover = !s.over && humans().length > 1 && !isAI() && revealed !== s.active;
     $('#cover').hidden = !cover;
-    if (cover) { $('#cover').innerHTML = `<div class="cover-box"><i class="dot" style="background:${N.color}"></i><h2>Vez dos ${esc(N.name)}</h2><p>Passa o aparelho.</p><button class="btn primary" data-na-reveal>Começar o turno</button></div>`; return; }
+    if (cover) { $('#cover').innerHTML = `<div class="cover-box"><img class="portrait big" src="${portrait(me().nation)}" alt="" style="border-color:${N.color}"><h2>Vez dos ${esc(N.name)}</h2><p>Passa o aparelho.</p><button class="btn primary" data-na-reveal>Começar o turno</button></div>`; return; }
     if (s.over) {
-      const W = NATIONS[s.players[s.winner].nation];
-      $('#head').innerHTML = `Vitória dos ${esc(W.name)}!`; $('#guide').innerHTML = esc(s.reason || '');
-      $('#hand').innerHTML = ''; $('#market').innerHTML = '';
+      const rank = [...s.players].sort((a, b) => b.score - a.score), W = NATIONS[rank[0].nation];
+      $('#head').innerHTML = `<img class="portrait" src="${portrait(rank[0].nation)}" alt="" style="border-color:${W.color}"> Vitória dos ${esc(W.name)}!`;
+      $('#guide').innerHTML = rank.map((p, i) => `${i + 1}.º ${esc(NATIONS[p.nation].short)} — ${p.score} pontos`).join(' · ');
       $('#tools').innerHTML = '<button class="btn primary" data-na-newgame>Nova partida</button><button class="btn" data-menu>Menu</button>'; $('#msg').textContent = msg; return;
     }
-    $('#head').innerHTML = `${esc(N.name)} · ronda ${s.round} · ${s.step === 'act' ? `${+s.ap.toFixed(2)} pontos de acção` : 'coloca uma peça'} · ${me().gold} ouro`;
-    let guide = '', tools = '';
-    if (isAI()) { guide = `${esc(N.name)} (IA) estão a jogar…`; $('#hand').innerHTML = ''; $('#market').innerHTML = ''; }
-    else if (s.step === 'place') {
-      guide = ghost ? (ghost.ok ? 'Toca outra vez no mesmo hexágono, ou em «Colocar».' : 'Com esta rotação não encaixa aqui.') : 'Escolhe uma das 2 peças, roda-a e toca num hexágono marcado. A peça fica neutra: depois tens de a conquistar.';
-      $('#hand').innerHTML = s.hand.map((t, i) => `<button class="card${i === handI ? ' on' : ''}" data-na-hand="${i}">${tileHTML(t, 70, i === handI ? rot : 0)}<span class="nm">${esc(NAMES[t.kind])}</span></button>`).join('');
-      $('#market').innerHTML = '';
-      tools = '<button class="btn primary" data-na-rot>↻ Rodar</button>' + (ghost?.ok ? '<button class="btn primary" data-na-place>Colocar</button>' : '') + '<button class="btn" data-na-skip>Não colocar</button>';
-    } else {
-      const w = sel != null ? me().pawns.find(x => x.id === sel) : null;
-      guide = w ? 'Azul: onde o peão chega (toca para mover). Vermelho: peões inimigos que podes atacar.' : 'Toca num peão teu para o escolher.';
-      $('#hand').innerHTML = ''; $('#market').innerHTML = '';
-      if (w && s.ap >= 1) {
-        const c = s.board[w.at];
-        if (c.owner !== s.active) tools += `<button class="btn primary" data-na-conquer>Conquistar ${c.legendary ? LEGENDARY_NAMES[c.legendary] : ''} (defesa ${tileDefense(s, w.at)}, ${pct(chanceVsFixed(w.level, tileDefense(s, w.at)))})</button>`;
-        else if (!c.structure && c.kind !== 'village' && !isPathTile(c.kind) && me().gold >= towerCost(s)) tools += `<button class="btn" data-na-tower>Construir Torre (${towerCost(s)} ouro)</button>`;
-      }
-      if (s.ap >= 1 && me().gold >= recruitCost(s) && me().pawns.length < RULES.maxPawns && recruitSpots(s).length) tools += `<button class="btn" data-na-recruit>Recrutar peão (${recruitCost(s)} ouro)</button>`;
-      tools += '<button class="btn primary" data-na-end>Terminar turno</button>';
-    }
-    $('#guide').innerHTML = guide; $('#tools').innerHTML = tools; $('#msg').textContent = msg;
-    if (isAI()) timer = setTimeout(aiStep, 380);
+    $('#head').innerHTML = `<img class="portrait" src="${portrait(me().nation)}" alt="" style="border-color:${N.color}"> ${esc(N.name)} · <b>${s.hand}</b> tropas na mão · ${me().score} pontos`;
+    $('#guide').innerHTML = guideText();
+    $('#tools').innerHTML = isAI() ? '' : `${undo.length ? '<button class="btn" data-na-undo>Desfazer</button>' : ''}<button class="btn primary" data-na-end>Terminar turno</button>`;
+    $('#msg').textContent = msg;
+    if (isAI()) timer = setTimeout(aiStep, 260);
   }
 
-  function apply(r) {
+  function apply(r, keepUndo = true) {
     if (r.error) { msg = r.error; render(); return; }
-    const prev = s.active; s = r.state; msg = (r.events || []).join(' · ');
-    if (s.active !== prev) { sel = null; handI = 0; rot = 0; ghost = null; }
-    if (s.step === 'act' && ghost) ghost = null;
+    if (keepUndo) undo.push(s);
+    const prev = s.active; s = r.state;
+    if (s.active !== prev) { undo = []; const lt = s.lastTurn; if (lt) msg = `${NATIONS[s.players[lt.player].nation].short}: ${lt.conquered} conquista${lt.conquered === 1 ? '' : 's'}, +${lt.points} pontos.`; if (prev != null && s.players[prev].kind !== 'ai' && s.round >= 2) { tutorial = false; try { store?.setItem(SEEN, '1'); } catch {} } }
     save(); render();
   }
-  function aiStep() { if (!s || s.over || !isAI()) return; apply(act(s, aiAction(s))); }
+  function aiStep() { if (!s || s.over || !isAI()) return; apply(act(s, aiAction(s)), false); }
 
   function onHex(h) {
-    if (!h || s.over || isAI()) return;
-    const k = h.q + ',' + h.r;
-    if (s.step === 'place') {
-      if (ghost && ghost.q === h.q && ghost.r === h.r && ghost.ok) { const r = act(s, { type: 'place', i: handI, q: h.q, r: h.r, rot }); ghost = null; rot = 0; apply(r); return; }
-      if (s.board[k]) return;
-      let ok = !!placementScore(s, h.q, h.r, { ...s.hand[handI], rot });
-      if (!ok) { const o = placements(s).find(a => a.i === handI && a.q === h.q && a.r === h.r); if (o) { rot = o.rot; ok = true; } }
-      ghost = { q: h.q, r: h.r, ok }; render(); return;
-    }
-    const mine = me().pawns.find(w => w.at === k);
-    if (mine) { sel = mine.id; msg = ''; render(); return; }
-    if (sel == null) return;
-    const t = pawnAt(s, k);
-    if (t && t.player.id !== s.active) {
-      const w = me().pawns.find(x => x.id === sel), cell = s.board[k];
-      const b = t.pawn.level + (cell.owner === t.player.id ? 1 : 0) + (cell.structure ? 2 : 0);
-      if (!confirm(`Atacar? Probabilidade de ganhar: ${pct(chanceVsPawn(w.level + (me().nation === 'fire' ? 1 : 0), b))}`)) return;
-      apply(act(s, { type: 'attack', pawn: sel, target: k })); return;
-    }
-    if (reachable(s, sel)[k] != null) apply(act(s, { type: 'move', pawn: sel, to: k }));
+    if (!h || !s || s.over || isAI()) return;
+    const k = h.q + ',' + h.r, c = s.board[k]; if (!c) return;
+    if (c.owner === s.active) { msg = ''; apply(act(s, { type: 'deploy', k })); return; }
+    const cost = conquerCost(s, k);
+    if (cost == null) { msg = c.kind === 'lake' ? 'Só os Espíritos do Gelo conquistam Lagos.' : 'Só podes conquistar ao lado das tuas terras (ou na borda, se ainda não tens nenhuma).'; render(); return; }
+    msg = `${nameOf(c)} conquistada por ${cost} tropas.`; apply(act(s, { type: 'conquer', k }));
   }
 
   function onClick(b) {
     const d = b.dataset;
     if (d.naReveal != null) { revealed = s.active; render(); return true; }
-    if (d.naHand != null) { handI = +d.naHand; rot = 0; ghost = null; render(); return true; }
-    if (d.naRot != null) { rot = (rot + 1) % 6; if (ghost) ghost.ok = !!placementScore(s, ghost.q, ghost.r, { ...s.hand[handI], rot }); render(); return true; }
-    if (d.naPlace != null) { const r = act(s, { type: 'place', i: handI, q: ghost.q, r: ghost.r, rot }); ghost = null; rot = 0; apply(r); return true; }
-    if (d.naSkip != null) { ghost = null; apply(act(s, { type: 'skipPlace' })); return true; }
-    if (d.naConquer != null) { apply(act(s, { type: 'conquer', pawn: sel })); return true; }
-    if (d.naTower != null) { const w = me().pawns.find(x => x.id === sel); apply(act(s, { type: 'tower', at: w.at })); return true; }
-    if (d.naRecruit != null) { apply(act(s, { type: 'recruit', at: recruitSpots(s)[0] })); return true; }
-    if (d.naEnd != null) { sel = null; apply(act(s, { type: 'end' })); return true; }
+    if (d.naUndo != null) { s = undo.pop(); msg = 'Desfeito.'; save(); render(); return true; }
+    if (d.naEnd != null) { apply(act(s, { type: 'end' }), false); return true; }
     if (d.naNewgame != null) { openSetup(); return true; }
-    if (d.naCount) { const n = +d.naCount; draft = Array.from({ length: n }, (_, i) => draft[i] || (i === 0 ? 'human' : 'normal')); openSetup(); return true; }
+    if (d.naCount) { const n = +d.naCount; const used = new Set(); draft = Array.from({ length: n }, (_, i) => { const x = draft[i] || { nation: ORDER.find(o => !draft.some(y => y.nation === o)) || ORDER[i], kind: i ? 'normal' : 'human' }; return x; });
+      draft.forEach(x => { if (used.has(x.nation)) x.nation = ORDER.find(o => !used.has(o)); used.add(x.nation); }); openSetup(); return true; }
     if (d.naStart != null) { begin(); return true; }
     if (d.naContinue != null) { $('#dialog').hidden = true; render(); fit(); return true; }
     return false;
   }
-  function onChange(e) { const i = e.target.dataset?.naKind; if (i != null) draft[+i] = e.target.value; }
+  function onChange(e) {
+    const t = e.target.dataset || {};
+    if (t.naKind != null) draft[+t.naKind].kind = e.target.value;
+    if (t.naNation != null) { const i = +t.naNation, v = e.target.value, j = draft.findIndex(x => x.nation === v); if (j >= 0 && j !== i) draft[j].nation = draft[i].nation; draft[i].nation = v; openSetup(); }
+  }
 
   function openSetup() {
     const d = $('#dialog'); d.hidden = false;
-    d.innerHTML = `<div class="cover-box"><h2>Quatro Nações</h2><p class="hint">Conquista território com os teus peões. 2 a 4 nações, pessoas ou IA. <b>Para jogar sozinho:</b> deixa um lugar como Pessoa e os outros como IA. A IA difícil começa com 3 peões de nível 2 e +1 ouro por turno.</p>
+    d.innerHTML = `<div class="cover-box"><h2>Quatro Nações</h2>
+      <p class="hint">Conquista o mapa com as tuas tropas. Sem dados: cada conquista tem um custo certo e escrito no mapa. 8 rondas, cerca de 10 minutos.
+      <b>Para jogar sozinho:</b> o teu lugar como Pessoa e os outros como IA. A IA difícil começa com +2 tropas.</p>
       <div class="count">${[2, 3, 4].map(n => `<button class="btn small${draft.length === n ? ' primary' : ''}" data-na-count="${n}">${n} nações</button>`).join('')}</div>
-      <div class="names">${draft.map((k, i) => { const N = NATIONS[ORDER[i]]; return `<label><i style="background:${N.color}"></i><span style="flex:1;text-align:left"><b>${esc(N.name)}</b><br><small>${esc(N.text)}</small></span>
-        <select data-na-kind="${i}">${[['human', 'Pessoa'], ['easy', 'IA fácil'], ['normal', 'IA normal'], ['hard', 'IA difícil']].map(([v, t]) => `<option value="${v}"${k === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`; }).join('')}</div>
+      <div class="names">${draft.map((x, i) => { const N = NATIONS[x.nation]; return `<label><img class="portrait" src="${portrait(x.nation)}" alt="" style="border-color:${N.color}">
+        <span style="flex:1;text-align:left"><select data-na-nation="${i}" aria-label="Nação do lugar ${i + 1}">${ORDER.map(o => `<option value="${o}"${o === x.nation ? ' selected' : ''}>${NATIONS[o].name}</option>`).join('')}</select><br><small>${esc(N.text)}</small></span>
+        <select data-na-kind="${i}" aria-label="Quem joga">${[['human', 'Pessoa'], ['easy', 'IA fácil'], ['normal', 'IA normal'], ['hard', 'IA difícil']].map(([v, t]) => `<option value="${v}"${x.kind === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`; }).join('')}</div>
       <div class="row-btns"><button class="btn" data-cancel>Cancelar</button><button class="btn primary" data-na-start>Começar</button></div></div>`;
   }
   function begin() {
-    if (!draft.some(k => k === 'human')) draft[0] = 'human';
-    s = createNations({ seed: randomSeed(), players: draft.map((k, i) => ({ nation: ORDER[i], kind: k === 'human' ? 'human' : 'ai', level: k === 'human' ? null : k })) });
-    sel = null; handI = 0; rot = 0; ghost = null; msg = ''; revealed = humans().length === 1 ? s.players.find(p => p.kind !== 'ai').id : null;
+    if (!draft.some(x => x.kind === 'human')) draft[0].kind = 'human';
+    s = createNations({ seed: randomSeed(), players: draft.map(x => ({ nation: x.nation, kind: x.kind === 'human' ? 'human' : 'ai', level: x.kind === 'human' ? null : x.kind })) });
+    undo = []; msg = ''; revealed = humans().length === 1 ? humans()[0].id : null;
+    try { tutorial = store?.getItem(SEEN) !== '1'; } catch {}
     $('#dialog').hidden = true; save(); render(); fit();
   }
   function start() {
     let saved = null; try { saved = JSON.parse(store?.getItem(SAVE) || 'null'); } catch {}
-    if (saved && saved.mode === 'nations' && saved.version === 1 && !saved.over) {
-      s = saved; revealed = null; sel = null; ghost = null; msg = '';
+    if (saved && saved.mode === 'nations' && saved.version === 2 && !saved.over) {
+      s = saved; revealed = humans().length === 1 ? humans()[0].id : null; undo = []; msg = '';
+      try { tutorial = store?.getItem(SEEN) !== '1'; } catch {}
       const d = $('#dialog'); d.hidden = false;
-      d.innerHTML = `<div class="cover-box"><h2>Quatro Nações</h2><p>Tens uma partida a meio (ronda ${s.round}).</p><div class="row-btns"><button class="btn" data-na-newgame>Nova partida</button><button class="btn primary" data-na-continue>Continuar</button></div></div>`;
+      d.innerHTML = `<div class="cover-box"><h2>Quatro Nações</h2><p>Tens uma partida a meio (ronda ${s.round} de ${RULES.rounds}).</p><div class="row-btns"><button class="btn" data-na-newgame>Nova partida</button><button class="btn primary" data-na-continue>Continuar</button></div></div>`;
       return;
     }
     openSetup();
   }
-  const hasSaved = () => { try { const x = JSON.parse(store?.getItem(SAVE) || 'null'); return !!(x && x.version === 1 && !x.over); } catch { return false; } };
+  const hasSaved = () => { try { const x = JSON.parse(store?.getItem(SAVE) || 'null'); return !!(x && x.version === 2 && !x.over); } catch { return false; } };
   return { start, render, onHex, onClick, onChange, hasSaved };
 }

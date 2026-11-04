@@ -219,6 +219,18 @@ export class MapView {
   // Peão (marcador provisório): cabeça e corpo a tinta, na cor da raça, com a letra e o nível.
   _pawn(x, y, w) {
     const ctx = this.ctx; ctx.save();
+    if (w.img && w.img.complete && w.img.naturalWidth) {
+      // peão ilustrado: base na cor da nação, figura por cima, pontos de nível em baixo
+      if (w.selected) { ctx.beginPath(); ctx.ellipse(x, y + 52, 62, 22, 0, 0, Math.PI * 2); ctx.lineWidth = 8; ctx.strokeStyle = '#c8922e'; ctx.stroke(); }
+      ctx.beginPath(); ctx.ellipse(x, y + 52, 50, 16, 0, 0, Math.PI * 2); ctx.fillStyle = w.color; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = '#2f2216'; ctx.stroke();
+      const H = 150, W = H * w.img.naturalWidth / w.img.naturalHeight;
+      ctx.drawImage(w.img, x - W / 2, y + 58 - H, W, H);
+      if (w.count != null) {        // número de tropas
+        ctx.beginPath(); ctx.arc(x + 40, y + 40, 24, 0, Math.PI * 2); ctx.fillStyle = '#fbf6ea'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = w.color; ctx.stroke();
+        ctx.fillStyle = '#2f2216'; ctx.font = '700 30px Alegreya, Georgia, serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(w.count, x + 40, y + 42);
+      } else for (let i = 0; i < w.level; i++) { ctx.beginPath(); ctx.arc(x - (w.level - 1) * 10 + i * 20, y + 74, 7, 0, Math.PI * 2); ctx.fillStyle = '#c8922e'; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = '#2f2216'; ctx.stroke(); }
+      ctx.restore(); return;
+    }
     if (w.selected) { ctx.beginPath(); ctx.arc(x, y + 6, 58, 0, Math.PI * 2); ctx.lineWidth = 8; ctx.strokeStyle = '#c8922e'; ctx.stroke(); }
     ctx.fillStyle = 'rgba(47,34,22,.25)'; ctx.beginPath(); ctx.ellipse(x, y + 46, 40, 12, 0, 0, Math.PI * 2); ctx.fill();
     ctx.lineWidth = 5; ctx.strokeStyle = '#2f2216'; ctx.fillStyle = w.color;

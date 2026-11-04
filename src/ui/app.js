@@ -82,7 +82,7 @@ function openMenu(note = '') {
   d.innerHTML = `<div class="cover-box"><h2>FRONTIER</h2>
     <div class="modes">
       <button class="btn primary" data-world><b>Campanha Solo</b><small>Sozinho, território a território, contra a praga</small></button>
-      <button class="btn primary" data-nations><b>Quatro Nações</b><small>Guardiões, Forjadores, Nómadas e Espíritos · peões, conquista e combate · sozinho contra a IA (3 níveis) ou com amigos ${natUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
+      <button class="btn primary" data-nations><b>Quatro Nações</b><small>Escolhe a tua nação e conquista o mapa · sem dados, cada conquista tem um custo certo · 8 rondas · sozinho contra a IA ou com amigos ${natUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
       <button class="btn" data-open-new="A"><b>Free Frontier</b><small>2 a 4 · contra a IA ou com amigos · regras base</small></button>
       <button class="btn" data-open-new="B"><b>Frontier Rules</b><small>2 a 4 · contra a IA ou com amigos · biomas, rios e presságios</small></button>
       <button class="btn primary" data-unknown><b>Terras Desconhecidas</b><small>Sozinho: cartografa uma região com um Explorador, liga Aldeias e locais, 3 capítulos com objectivos. Sem dados. ${unkUI?.hasSaved() ? '(tens uma a meio)' : ''}</small></button>
@@ -96,7 +96,7 @@ function openMenu(note = '') {
       : '<p class="hint">Ainda não há partidas guardadas.</p>'}
     <div class="row-btns"><label class="btn small">Importar ficheiro<input type="file" accept=".json,application/json" data-import hidden></label></div>
     <p class="hint">As partidas gravam-se sozinhas neste aparelho. Para continuar noutro, exporta aqui e importa lá.</p>
-    <p class="hint">Versão 1.5</p></div>`;
+    <p class="hint">Versão 1.7</p></div>`;
 }
 
 function act(a) {
