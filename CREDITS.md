@@ -20,6 +20,10 @@ Desenhos de **Carlos Martins (C. Martins)**, segundo os créditos do projecto or
 - As cenas de topo pontiagudo foram reunidas em folhas WebP por pacote (`assets/art/*.webp`).
 - Planeado: `forest_18_blast` recolorido a laranja para o acontecimento Incêndio florestal.
 
+## Peões e retratos das Quatro Nações
+
+Imagens geradas com IA (Google Gemini) pelo Vasco, a partir de prompts próprios, sem nomear artistas. Originais em `assets/source/nations/`; versões do jogo em `assets/nations/` (peões recortados, retratos cortados). Confirmar nos termos da ferramenta as condições de uso num jogo publicado.
+
 ## Tipografia
 
 IM Fell English SC (Igino Marini) e Alegreya (Huerta Tipográfica), SIL Open Font License 1.1.
